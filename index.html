@@ -279,31 +279,34 @@ details.danger summary{cursor:pointer;font-weight:600;color:var(--rouge)}
 #toast.err{background:var(--rouge)}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important;scroll-behavior:auto!important}}
 
-/* Impression du ticket */
-#print{display:none}
+/* Ticket imprimé
+   Les styles s'appliquent aussi à l'écran (hors champ, classe .measure) pour mesurer la hauteur
+   du ticket : la page imprimée fait alors exactement la taille du ticket.
+   --ticket-w = zone imprimable (48 mm sur un rouleau de 58, 72 mm sur un rouleau de 80). */
+#print{display:none;width:var(--ticket-w,48mm);color:#000;background:#fff;font:var(--ticket-fs,10pt)/1.3 Arial,Helvetica,sans-serif}
+#print.measure{display:block;position:absolute;left:-9999px;top:0}
+#print .tk-h{text-align:center}
+#print .tk-h b{display:block;font-size:1.3em}
+#print .tk-num{text-align:center;font-weight:700;font-size:2.2em;line-height:1.1;border:2px solid #000;margin:6px 0;padding:2px 0}
+#print .tk-x{text-align:center;font-weight:700;letter-spacing:2px;margin-bottom:4px}
+#print table{width:100%;border-collapse:collapse}
+#print td{padding:2px 0;vertical-align:top}
+#print td:last-child{text-align:right;white-space:nowrap;padding-left:6px}
+#print small{font-size:.85em}
+#print .tk-tot{display:flex;justify-content:space-between;gap:6px}
+#print .tk-tot.b{font-weight:700;font-size:1.1em}
+#print .tk-sep{border-top:1px dashed #000;margin:5px 0}
+#print .tk-rdv{text-align:center}
+#print .tk-pied{text-align:center;font-size:.85em;margin:6px 0 0}
+#print .tk-cut{border-top:1px dashed #000;margin:14px 0 8px;padding-top:2px;text-align:center;font-size:.8em}
+#print .tk-e .tk-num{font-size:3em}
 @media print{
-  @page{margin:2mm}
-  body{background:#fff}
-  #app,#nav,#toast{display:none!important}
-  #print{display:block;width:var(--ticket-w,58mm);color:#000;font:10pt/1.3 Arial,Helvetica,sans-serif}
-  .tk{break-inside:avoid}
-  .tk-h{text-align:center}
-  .tk-h b{display:block;font-size:13pt}
-  .tk-num{text-align:center;font:700 22pt/1.1 Arial,sans-serif;border:2px solid #000;margin:6px 0;padding:2px 0}
-  .tk-x{text-align:center;font-weight:700;letter-spacing:2px;margin-bottom:4px}
-  .tk table{width:100%;border-collapse:collapse}
-  .tk td{padding:2px 0;vertical-align:top}
-  .tk td:last-child{text-align:right;white-space:nowrap;padding-left:6px}
-  .tk small{font-size:8.5pt}
-  .tk-tot{display:flex;justify-content:space-between}
-  .tk-tot.b{font-weight:700;font-size:11pt}
-  .tk-sep{border-top:1px dashed #000;margin:5px 0}
-  .tk-rdv{text-align:center}
-  .tk-pied{text-align:center;font-size:8.5pt;margin:6px 0 0}
-  .tk-cut{border-top:1px dashed #000;margin:14px 0 8px;padding-top:2px;text-align:center;font-size:8pt}
-  .tk-e .tk-num{font-size:30pt}
+  html,body{background:#fff;margin:0;padding:0}
+  #app,#nav,#toast,#dm{display:none!important}
+  #print{display:block}
 }
 </style>
+<style id="page-style"></style>
 </head>
 <body>
 <div id="dm" role="alert" hidden>Affichage trop petit : dans le menu ⋮ de Chrome, décochez « Version pour ordinateur ».</div>
@@ -314,7 +317,7 @@ details.danger summary{cursor:pointer;font-weight:600;color:var(--rouge)}
 
 <script>
 'use strict';
-const VERSION = '1.0.2';
+const VERSION = '1.0.3';
 
 /* ---------- Petits outils ---------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -1027,9 +1030,17 @@ function vReglages() {
     ${f('joursOubli', 'Linge oublié après (jours)', 'type="number" inputmode="numeric" min="1"')}
     ${f('indicatif', 'Indicatif WhatsApp', 'inputmode="numeric"')}
     ${f('prefixe', 'Préfixe des tickets', 'maxlength="4" autocapitalize="characters"', `Prochain ticket : ${esc(numFmt(s.nextNum))}`)}
-    <label class="fld"><span>Largeur du ticket</span><select data-ch="set" data-k="largeur"><option value="58" ${+s.largeur === 58 ? 'selected' : ''}>58 mm</option><option value="80" ${+s.largeur === 80 ? 'selected' : ''}>80 mm</option></select></label>
   </div>
-  <label class="switch"><input type="checkbox" data-ch="set" data-k="etiquette" ${s.etiquette ? 'checked' : ''}><span class="sw"></span><span>Imprimer aussi l'étiquette atelier</span></label>
+  </section>`;
+
+  const fmt = PAPIER[s.largeur] || PAPIER[58];
+  h += `<section class="sect"><h2>Ticket imprimé</h2>
+    <label class="fld"><span>Format du papier</span><select data-ch="set" data-k="largeur">${Object.entries(PAPIER).map(([k, v]) => `<option value="${k}" ${String(s.largeur) === k ? 'selected' : ''}>${v.label}</option>`).join('')}</select>
+      <small class="hint">${fmt.papier === 'A4'
+        ? 'Imprimante de bureau : le ticket est imprimé en haut de la feuille, sur 8 cm de large.'
+        : `Imprimante thermique : page de ${fmt.papier} mm de large, texte sur ${fmt.zone} mm, longueur ajustée au contenu.`}</small></label>
+    <label class="switch"><input type="checkbox" data-ch="set" data-k="etiquette" ${s.etiquette ? 'checked' : ''}><span class="sw"></span><span>Imprimer aussi l'étiquette atelier</span></label>
+    <button class="btn btn-l block" data-a="printtest">${I.print} Imprimer un ticket d'essai</button>
   </section>`;
 
   h += `<section class="sect"><h2>Messages WhatsApp</h2><p class="hint">Remplacés automatiquement : {client}, {ticket}, {pressing}, {reste}, {date_pret}.</p>
@@ -1071,8 +1082,8 @@ function vTarifs() {
 }
 
 /* ---------- Ticket imprimé ---------- */
-function ticketHTML(c) {
-  const s = S.settings, cl = client(c.clientId) || {}, r = reste(c), p = paye(c);
+function ticketHTML(c, cl = client(c.clientId) || {}) {
+  const s = S.settings, r = reste(c), p = paye(c);
   let h = `<div class="tk"><div class="tk-h"><b>${esc(s.nom)}</b>${s.adresse ? `<div>${esc(s.adresse)}</div>` : ''}${s.tel ? `<div>Tél. ${esc(s.tel)}</div>` : ''}</div>
     <div class="tk-num">${esc(c.num)}</div>${c.express ? '<div class="tk-x">EXPRESS</div>' : ''}
     <div>Client : ${esc(cl.nom || '')}</div>${cl.tel ? `<div>Tél. : ${esc(cl.tel)}</div>` : ''}<div>Déposé le ${fDateH(c.dateDepot)}</div>
@@ -1096,11 +1107,40 @@ function ticketHTML(c) {
   }
   return h;
 }
-function imprimer(c) {
-  const p = $('#print');
-  p.innerHTML = ticketHTML(c);
-  p.style.setProperty('--ticket-w', (+S.settings.largeur || 58) + 'mm');
+// Formats de ticket. Sur un rouleau thermique, la tête d'impression ne couvre pas toute la largeur :
+// 48 mm imprimables sur un rouleau de 58 mm, 72 mm sur un rouleau de 80 mm.
+const PAPIER = {
+  58: {label: 'Rouleau 58 mm', papier: 58, zone: 48, fs: '10pt'},
+  80: {label: 'Rouleau 80 mm', papier: 80, zone: 72, fs: '11pt'},
+  A4: {label: 'Feuille A4', papier: 'A4', zone: 80, fs: '11pt'}
+};
+function imprimer(c, cl) {
+  const cfg = PAPIER[S.settings.largeur] || PAPIER[58], p = $('#print');
+  p.innerHTML = ticketHTML(c, cl);
+  p.style.setProperty('--ticket-w', cfg.zone + 'mm');
+  p.style.setProperty('--ticket-fs', cfg.fs);
+  let page;
+  if (cfg.papier === 'A4') page = 'size:A4;margin:12mm';
+  else {
+    // Hauteur de page = hauteur réelle du ticket + 4 mm de marge en haut et en bas
+    p.classList.add('measure');
+    const hauteur = Math.ceil(p.getBoundingClientRect().height * 25.4 / 96) + 8;
+    p.classList.remove('measure');
+    page = `size:${cfg.papier}mm ${hauteur}mm;margin:4mm ${(cfg.papier - cfg.zone) / 2}mm`;
+  }
+  $('#page-style').textContent = `@page{${page}}`;
   setTimeout(() => window.print(), 60);
+}
+function ticketEssai() {
+  const now = new Date().toISOString();
+  imprimer({
+    num: numFmt(S.settings.nextNum), express: false, expressPct: +S.settings.expressPct || 0, statut: 'depose', note: '',
+    lignes: [
+      {qte: 3, nom: 'Chemise', serviceNom: 'Lavage + repassage', pu: 400, note: 'Tache sur le col'},
+      {qte: 1, nom: 'Costume 2 pièces', serviceNom: 'Nettoyage à sec', pu: 3000, note: ''}
+    ],
+    brut: 4200, maj: 0, remise: 0, total: 4200, paiements: [{montant: 2000}], dateDepot: now, dateRetraitPrevue: addDays(3)
+  }, {nom: 'Client test', tel: '70 00 00 00'});
 }
 
 /* ---------- Sauvegarde ---------- */
@@ -1179,6 +1219,7 @@ const A = {
     save(); toast('Commande rétablie'); render();
   },
   print(el) { imprimer(cmd(el.dataset.id)); },
+  printtest() { ticketEssai(); },
 
   // Formulaire de dépôt
   fsvc(el) { F.service = el.dataset.id; render(); },
@@ -1280,13 +1321,13 @@ const CH = {
     else if (el.type === 'number') { v = Math.max(0, Math.round(+el.value || 0)); if (k === 'joursOubli') v = Math.max(1, v); el.value = v; }
     else v = el.value.trim();
     if (k === 'nom' && !v) { v = 'Mon pressing'; el.value = v; }
-    if (k === 'largeur') v = +v;
+    if (k === 'largeur') v = v === 'A4' ? 'A4' : +v;
     if (k === 'indicatif') { v = digits(v) || '226'; el.value = v; }
     if (k === 'prefixe') { v = v.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4); el.value = v; }
     S.settings[k] = v;
     save();
     toast('Enregistré');
-    if (k === 'prefixe') render();
+    if (k === 'prefixe' || k === 'largeur') render();
   },
   cli(el) {
     const c = client(el.dataset.id), f = el.dataset.f, v = el.value.trim();
