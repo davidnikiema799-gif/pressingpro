@@ -1,7 +1,8 @@
 <!doctype html>
-<html lang="fr">
+<html lang="fr" translate="no">
 <head>
 <meta charset="utf-8">
+<meta name="google" content="notranslate">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#2238A6">
 <meta name="color-scheme" content="light">
@@ -265,6 +266,9 @@ details.danger summary{cursor:pointer;font-weight:600;color:var(--rouge)}
 #nav .plus{display:grid;place-items:center;width:54px;height:54px;margin-top:-24px;border-radius:50%;background:var(--bleu);color:#fff;border:4px solid var(--card)}
 #nav .plus svg{width:26px;height:26px;stroke-width:2.4}
 
+/* Bandeau si Chrome est en mode « Version pour ordinateur » : tout est rétréci, d'où la grande taille */
+#dm{background:var(--ambre-2);color:var(--ambre);border-bottom:2px solid #EBD3A2;padding:24px 28px;font-size:34px;line-height:1.3;font-weight:600;text-align:center}
+
 /* Messages éphémères */
 #toast{position:fixed;left:50%;top:calc(12px + env(safe-area-inset-top));transform:translate(-50%,-12px);opacity:0;pointer-events:none;background:var(--ink);color:#fff;padding:12px 18px;border-radius:10px;font-weight:500;max-width:calc(100% - 32px);width:max-content;transition:opacity .25s,transform .25s;z-index:50;text-align:center;box-shadow:0 6px 20px rgba(21,33,44,.25)}
 #toast.show{opacity:1;transform:translate(-50%,0)}
@@ -298,6 +302,7 @@ details.danger summary{cursor:pointer;font-weight:600;color:var(--rouge)}
 </style>
 </head>
 <body>
+<div id="dm" role="alert" hidden>Affichage trop petit : dans le menu ⋮ de Chrome, décochez « Version pour ordinateur ».</div>
 <div id="app"><main id="view" aria-live="polite"></main></div>
 <nav id="nav" aria-label="Navigation principale"></nav>
 <div id="toast" role="status"></div>
@@ -305,7 +310,7 @@ details.danger summary{cursor:pointer;font-weight:600;color:var(--rouge)}
 
 <script>
 'use strict';
-const VERSION = '1.0.0';
+const VERSION = '1.0.1';
 
 /* ---------- Petits outils ---------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -1352,8 +1357,17 @@ document.addEventListener('keydown', e => {
 window.addEventListener('hashchange', () => { ui.remise = null; if (parseHash().name !== 'reglages') pendingImport = null; render(); });
 window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredInstall = e; if (parseHash().name === 'reglages') render(); });
 
+// Mode « Version pour ordinateur » sur téléphone : la page est affichée sur ~980 px
+// alors que l'écran en fait ~400. On prévient l'utilisateur au lieu de le laisser plisser les yeux.
+function checkDesktopMode() {
+  const tactile = window.matchMedia('(pointer: coarse)').matches;
+  $('#dm').hidden = !(tactile && screen.width < 700 && window.innerWidth > screen.width * 1.5);
+}
+window.addEventListener('resize', checkDesktopMode);
+
 /* ---------- Démarrage ---------- */
 (async function init() {
+  checkDesktopMode();
   await Store.open();
   let d = null;
   try { d = await Store.load(); } catch (e) { console.error(e); }
