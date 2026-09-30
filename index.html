@@ -127,6 +127,10 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--bleu);outline-of
 .card.backup-warn p{flex:1 1 220px;margin:0}
 .card.warn-card{background:var(--rouge-2);border-color:#EFC4BC}
 .card.calm{color:var(--ink-2);display:flex;align-items:center;gap:8px}
+.install-card{display:flex;gap:14px;align-items:flex-start;border-color:#C9D2F3;background:var(--bleu-2)}
+.install-card img{border-radius:12px;flex:none}
+.install-card p{margin:4px 0 0;color:var(--ink-2);font-size:15px}
+.install-card .btn-row{margin:10px 0 0}
 .card.empty{text-align:center;padding:26px 16px;color:var(--ink-2)}
 .sect{margin:18px 0}
 .sect>h2{margin-bottom:10px}
@@ -310,7 +314,7 @@ details.danger summary{cursor:pointer;font-weight:600;color:var(--rouge)}
 
 <script>
 'use strict';
-const VERSION = '1.0.1';
+const VERSION = '1.0.2';
 
 /* ---------- Petits outils ---------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -435,7 +439,8 @@ function save() {
 /* ---------- État de l'écran ---------- */
 let S = null, F = null;
 let periode = 'jour', cmdFilter = 'encours', cmdQ = '', cmdLimit = 60, cliQ = '', payMode = 'Espèces';
-let pendingImport = null, deferredInstall = null;
+let pendingImport = null, deferredInstall = null, installLater = false;
+const standalone = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
 const ui = {remise: null};
 
 /* ---------- Règles métier ---------- */
@@ -602,6 +607,11 @@ function vAccueil() {
   const s = S.settings, act = actives();
   const dl = new Date().toLocaleDateString('fr-FR', {weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'});
   let h = `<header class="home-head"><h1>${esc(s.nom)}</h1><p class="muted">${esc(dl.charAt(0).toUpperCase() + dl.slice(1))}</p></header>`;
+
+  if (deferredInstall && !installLater && !standalone()) {
+    h += `<section class="card install-card"><img src="icon-192.png" alt="" width="52" height="52"><div><b>Installer PressingPro sur ce téléphone</b><p>Elle s'ouvrira depuis l'écran d'accueil comme une application, même sans internet.</p>
+      <div class="btn-row"><button class="btn btn-p" data-a="install">${I.download} Installer</button><button class="btn btn-t" data-a="installlater">Plus tard</button></div></div></section>`;
+  }
 
   if (s.nom === 'Mon pressing') {
     h += `<section class="card"><h2>Bienvenue dans PressingPro</h2><p>Avant le premier client : renseignez le nom et le téléphone du pressing, puis vérifiez les prix.</p>
@@ -999,7 +1009,8 @@ function vReglages() {
   const s = S.settings;
   const f = (k, label, attrs = '', hint = '') => `<label class="fld"><span>${label}</span><input data-ch="set" data-k="${k}" value="${esc(s[k])}" ${attrs}>${hint ? `<small class="hint">${hint}</small>` : ''}</label>`;
   let h = `<header class="bar"><h1>Réglages</h1></header>`;
-  if (deferredInstall) h += `<section class="card"><p>Installez PressingPro sur l'écran d'accueil pour l'ouvrir comme une application, même sans internet.</p><button class="btn btn-p" data-a="install">Installer l'application</button></section>`;
+  if (deferredInstall && !standalone()) h += `<section class="card"><p>Installez PressingPro sur l'écran d'accueil pour l'ouvrir comme une application, même sans internet.</p><button class="btn btn-p" data-a="install">${I.download} Installer l'application</button></section>`;
+  else if (!standalone()) h += `<section class="card"><p><b>Installer l'application</b></p><p class="hint">Dans le menu ⋮ de Chrome, touchez « Installer l'application » ou « Ajouter à l'écran d'accueil ». Si l'option n'apparaît pas, l'app est peut-être déjà installée : cherchez l'icône PressingPro sur l'écran d'accueil.</p></section>`;
 
   h += `<section class="sect"><h2>Le pressing</h2>
     ${f('nom', 'Nom du pressing', 'autocomplete="organization"')}
@@ -1218,7 +1229,13 @@ const A = {
     if (v !== 'EFFACER') { toast('Tapez EFFACER pour confirmer', 'err'); return; }
     S = defaultState(); F = null; save(); toast('Toutes les données ont été effacées'); location.hash = '#/accueil'; render();
   },
-  install() { if (!deferredInstall) return; deferredInstall.prompt(); deferredInstall.userChoice.finally(() => { deferredInstall = null; render(); }); }
+  install() {
+    if (!deferredInstall) return;
+    const ev = deferredInstall;
+    ev.prompt();
+    ev.userChoice.then(ch => { if (ch.outcome !== 'accepted') installLater = true; }).finally(() => { deferredInstall = null; render(); });
+  },
+  installlater() { installLater = true; render(); }
 };
 
 /* ---------- Saisie (input) ---------- */
@@ -1355,7 +1372,13 @@ document.addEventListener('keydown', e => {
   }
 });
 window.addEventListener('hashchange', () => { ui.remise = null; if (parseHash().name !== 'reglages') pendingImport = null; render(); });
-window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredInstall = e; if (parseHash().name === 'reglages') render(); });
+// On garde la proposition d'installation de Chrome pour l'afficher nous-mêmes sur l'accueil
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredInstall = e;
+  if (['accueil', 'reglages'].includes(parseHash().name)) render();
+});
+window.addEventListener('appinstalled', () => { deferredInstall = null; toast('PressingPro est installée sur ce téléphone'); if (parseHash().name !== 'depot') render(); });
 
 // Mode « Version pour ordinateur » sur téléphone : la page est affichée sur ~980 px
 // alors que l'écran en fait ~400. On prévient l'utilisateur au lieu de le laisser plisser les yeux.
