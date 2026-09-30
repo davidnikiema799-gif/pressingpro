@@ -1,0 +1,4 @@
+# GitHub Pages : les fichiers sont servis tels quels
+title: PressingPro
+exclude:
+  - "*.zip"

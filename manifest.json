@@ -1,0 +1,17 @@
+{
+  "name": "PressingPro",
+  "short_name": "PressingPro",
+  "description": "Gestion de pressing : dépôts, tickets, retraits, caisse et notifications WhatsApp.",
+  "lang": "fr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F1F4F6",
+  "theme_color": "#2238A6",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
