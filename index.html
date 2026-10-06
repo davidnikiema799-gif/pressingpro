@@ -226,6 +226,15 @@ hr.dash{border:0;border-top:2px dashed var(--line);margin:10px 0}
 .switch input:checked+.sw::after{transform:translateX(18px)}
 .switch input:focus-visible+.sw{outline:2px solid var(--bleu);outline-offset:2px}
 .switch small{color:var(--ink-2)}
+.switch.later{background:var(--ambre-2);border-radius:8px;padding:8px 10px;margin:-2px 0 10px}
+.switch.later small{display:block;font-size:13px;color:var(--ambre)}
+.monnaie-card{background:var(--ambre-2);border-color:#EBD3A2}
+.monnaie-card p{margin:0 0 10px;color:var(--ambre)}
+.monnaie-card small{color:var(--ink-2)}
+.rl-h{font-size:15px;font-weight:600;margin:4px 0 2px}
+.rl.tiroir span{font-weight:600}
+.rl.tiroir b{font-size:24px;color:var(--ink)}
+.rl b.warn{color:var(--ambre)}
 .sticky-foot{position:sticky;bottom:calc(var(--nav-h) + env(safe-area-inset-bottom) + 10px);display:flex;align-items:center;gap:12px;margin:18px -4px 0;padding:10px 10px 10px 16px;background:var(--ink);color:#fff;border-radius:12px;z-index:5}
 .tot{flex:1;display:flex;flex-direction:column;line-height:1.1;min-width:0}
 .tot span{font-size:13px;opacity:.7}
@@ -344,7 +353,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 </script>
 <script>
 'use strict';
-const VERSION = '1.2.0';
+const VERSION = '1.3.0';
 
 /* ---------- Petits outils ---------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -483,6 +492,30 @@ const cmd = id => S.commandes.find(c => c.id === id);
 const actives = () => S.commandes.filter(c => c.statut !== 'annule');
 const paye = c => sum(c.paiements.map(p => p.montant));
 const reste = c => c.statut === 'annule' ? 0 : Math.max(0, c.total - paye(c));
+// Monnaie que le pressing doit encore au client (il n'y avait pas la monnaie sur place)
+const monnaieDue = c => c.statut === 'annule' ? 0 : sum(c.paiements.filter(p => p.monnaieDue).map(p => p.monnaie));
+
+/* Un paiement garde trois chiffres :
+   montant = ce qui reste au pressing (compte dans la caisse)
+   recu    = la somme donnée par le client
+   monnaie = recu - montant, rendue tout de suite ou « à rendre plus tard » (monnaieDue) */
+function nouveauPaiement(du, recu, mode, plusTard) {
+  const now = new Date().toISOString(), montant = Math.min(recu, du), monnaie = recu - montant;
+  const p = {id: uid(), montant, mode, date: now};
+  if (monnaie > 0) {
+    p.recu = recu;
+    p.monnaie = monnaie;
+    p.monnaieDue = !!plusTard;
+    p.monnaieRendueLe = plusTard ? null : now;
+  }
+  return p;
+}
+function toastPaiement(p, prefixe) {
+  if (!p.monnaie) return toast(prefixe || `${money(p.montant)} encaissés`);
+  toast(p.monnaieDue
+    ? `${prefixe ? prefixe + '. ' : ''}${money(p.monnaie)} de monnaie à rendre plus tard`
+    : `${prefixe ? prefixe + '. ' : ''}Monnaie à rendre : ${money(p.monnaie)}`);
+}
 const nbArt = c => sum(c.lignes.map(l => l.qte));
 const enRetard = c => (c.statut === 'depose' || c.statut === 'traitement') && c.dateRetraitPrevue < dISO();
 const oublie = c => c.statut === 'pret' && c.datePret && daysBetween(c.datePret, dISO()) >= (+S.settings.joursOubli || 30);
@@ -514,18 +547,18 @@ function waLink(tel, text) {
 }
 
 function fill(tpl, c) {
-  const cl = client(c.clientId) || {}, r = reste(c);
+  const cl = client(c.clientId) || {}, r = reste(c), md = monnaieDue(c);
   return String(tpl || '')
     .replace(/\{client\}/g, cl.nom || '')
     .replace(/\{ticket\}/g, c.num)
     .replace(/\{pressing\}/g, S.settings.nom)
-    .replace(/\{reste\}/g, r > 0 ? `Reste à payer : ${moneyT(r)}.` : 'Tout est déjà réglé.')
+    .replace(/\{reste\}/g, (r > 0 ? `Reste à payer : ${moneyT(r)}.` : 'Tout est déjà réglé.') + (md ? ` Nous vous devons ${moneyT(md)} de monnaie.` : ''))
     .replace(/\{date_pret\}/g, fDate(c.datePret))
     .trim();
 }
 
 function recuTexte(c) {
-  const s = S.settings, cl = client(c.clientId) || {}, r = reste(c), L = [];
+  const s = S.settings, cl = client(c.clientId) || {}, r = reste(c), md = monnaieDue(c), L = [];
   L.push(`*${s.nom}*`);
   if (s.tel) L.push('Tél. ' + s.tel);
   L.push('', `Ticket *${c.num}*${c.express ? ' (express)' : ''}`, `Client : ${cl.nom || ''}`, `Déposé le ${fDate(c.dateDepot)}`, '');
@@ -538,6 +571,7 @@ function recuTexte(c) {
   if (c.remise) L.push(`Remise : -${moneyT(c.remise)}`);
   L.push(`*Total : ${moneyT(c.total)}*`, `Payé : ${moneyT(paye(c))}`);
   L.push(r > 0 ? `*Reste à payer : ${moneyT(r)}*` : '*Tout est réglé*');
+  if (md) L.push(`*Monnaie à vous rendre : ${moneyT(md)}*`);
   L.push('', `Retrait prévu le ${fDate(c.dateRetraitPrevue)}`);
   if (s.pied) L.push('', s.pied);
   return L.join('\n');
@@ -582,8 +616,8 @@ function metaCmd(c) {
 }
 
 function rowCmd(c, act = '', compact = false) {
-  const cl = client(c.clientId) || {}, r = reste(c);
-  const row = `<a class="row" href="#/commande/${c.id}"><span class="tag">${esc(c.num)}</span><span class="row-main"><b>${esc(cl.nom || 'Sans nom')}</b><small>${c.express ? '<em class="xp">Express</em>' : ''}${plural(nbArt(c), 'article')}, ${metaCmd(c)}</small></span>${compact ? '' : `<span class="row-end">${pill(c)}${r > 0 ? `<small class="due">${money(r)}</small>` : ''}</span>`}</a>`;
+  const cl = client(c.clientId) || {}, r = reste(c), md = monnaieDue(c);
+  const row = `<a class="row" href="#/commande/${c.id}"><span class="tag">${esc(c.num)}</span><span class="row-main"><b>${esc(cl.nom || 'Sans nom')}</b><small>${c.express ? '<em class="xp">Express</em>' : ''}${plural(nbArt(c), 'article')}, ${metaCmd(c)}${md ? `, <span class="warn">monnaie à lui rendre ${money(md)}</span>` : ''}</small></span>${compact ? '' : `<span class="row-end">${pill(c)}${r > 0 ? `<small class="due">${money(r)}</small>` : ''}</span>`}</a>`;
   return act ? `<div class="row-wrap">${row}${act}</div>` : row;
 }
 
@@ -613,10 +647,19 @@ function stats(per) {
   const byMode = {};
   pays.forEach(p => byMode[p.mode] = (byMode[p.mode] || 0) + p.montant);
   const dep = act.filter(c => inP(c.dateDepot));
+  // Tiroir : espèces réellement reçues des clients, moins la monnaie rendue pendant la période
+  // (une monnaie « à rendre plus tard » sort du tiroir le jour où on la rend vraiment).
+  let recues = 0, rendue = 0;
+  act.forEach(c => c.paiements.forEach(p => {
+    if (p.mode !== 'Espèces') return;
+    if (inP(p.date)) recues += p.recu || p.montant;
+    if (p.monnaie && !p.monnaieDue && inP(p.monnaieRendueLe || p.date)) rendue += p.monnaie;
+  }));
   return {
     encaisse: sum(pays.map(p => p.montant)), byMode,
     nbDep: dep.length, nbArt: sum(dep.map(nbArt)), ca: sum(dep.map(c => c.total)),
-    remis: act.filter(c => c.statut === 'retire' && inP(c.dateRetrait)).length
+    remis: act.filter(c => c.statut === 'retire' && inP(c.dateRetrait)).length,
+    recues, rendue, tiroir: recues - rendue
   };
 }
 // Premier jour où l'app a enregistré quelque chose : on ne propose pas de remonter avant
@@ -635,7 +678,7 @@ function ilYa(iso) {
 }
 
 function caisseHTML() {
-  const st = stats(periode), imp = sum(actives().map(reste)), today = dISO();
+  const st = stats(periode), imp = sum(actives().map(reste)), md = sum(actives().map(monnaieDue)), today = dISO();
   const P = {jour: "Aujourd'hui", semaine: '7 jours', mois: 'Ce mois'};
   const [from, to] = bornes(periode);
   let quand;
@@ -656,12 +699,19 @@ function caisseHTML() {
     <div class="rl big"><span>Encaissé</span><i></i><b>${money(st.encaisse)}</b></div>
     ${MODES.map(m => `<div class="rl sub"><span>${m}</span><i></i><b>${money(st.byMode[m] || 0)}</b></div>`).join('')}
     <hr class="dash">
+    <h3 class="rl-h">Tiroir espèces</h3>
+    <div class="rl"><span>Reçu des clients</span><i></i><b>${money(st.recues)}</b></div>
+    <div class="rl"><span>Monnaie rendue</span><i></i><b>${st.rendue ? '− ' : ''}${money(st.rendue)}</b></div>
+    <div class="rl tiroir"><span>Doit être dans le tiroir</span><i></i><b>${money(st.tiroir)}</b></div>
+    <p class="period">En plus du fond de caisse du matin.</p>
+    <hr class="dash">
     <div class="rl"><span>Dépôts reçus</span><i></i><b>${st.nbDep}</b></div>
     <div class="rl"><span>Articles reçus</span><i></i><b>${st.nbArt}</b></div>
     <div class="rl"><span>Valeur des dépôts</span><i></i><b>${money(st.ca)}</b></div>
     <div class="rl"><span>Remis aux clients</span><i></i><b>${st.remis}</b></div>
     <hr class="dash">
     <a class="rl link" href="#/commandes/impaye"><span>Impayés en cours</span><i></i><b class="${imp ? 'due' : ''}">${money(imp)}</b></a>
+    <div class="rl"><span>Monnaie due aux clients</span><i></i><b class="${md ? 'warn' : ''}">${money(md)}</b></div>
   </section>`;
 }
 
@@ -699,13 +749,15 @@ function vAccueil() {
   const nn = act.filter(c => c.statut === 'pret' && !c.notifieLe && !oublie(c));
   const encours = act.filter(c => c.statut === 'depose' || c.statut === 'traitement').length;
   const prets = act.filter(c => c.statut === 'pret').length;
+  const mdl = act.filter(c => monnaieDue(c) > 0).sort((a, b) => a.dateDepot.localeCompare(b.dateDepot));
 
   h += `<div class="sec-h"><h2>À faire</h2><span class="muted">${plural(encours, 'commande')} à traiter, ${prets} prête${prets > 1 ? 's' : ''} à retirer</span></div>`;
   if (!S.commandes.length) {
     h += `<div class="card empty"><p>Aucun dépôt pour l'instant.</p><a class="btn btn-p" href="#/depot">${I.plus} Enregistrer le premier dépôt</a></div>`;
-  } else if (!late.length && !nn.length && !oub.length) {
+  } else if (!late.length && !nn.length && !oub.length && !mdl.length) {
     h += `<p class="card calm">${I.check} Rien d'urgent : le linge est dans les temps et les clients sont prévenus.</p>`;
   } else {
+    if (mdl.length) h += group('Monnaie à rendre aux clients', mdl, null, 'toutes');
     if (nn.length) h += group('Prêts, client pas encore prévenu', nn, c => waBtn(c, 'msgPret'), 'pret');
     if (late.length) h += group('En retard', late, null, 'encours');
     if (oub.length) h += group(`Linge oublié depuis plus de ${s.joursOubli} jours`, oub, c => waBtn(c, 'msgRelance'), 'pret');
@@ -764,8 +816,20 @@ function stepsHTML(c) {
 }
 
 function payFields(r, withValue) {
-  return `<label class="fld"><span>Montant reçu (F)</span><input id="pay-m" type="number" inputmode="numeric" min="0" ${withValue ? `value="${r}"` : `placeholder="${r}"`} data-in="paym" data-r="${r}"></label>
-    <div class="seg">${modeChips(payMode)}</div><p class="hint" id="pay-rendre"></p>`;
+  return `<label class="fld"><span>Somme donnée par le client (F)</span><input id="pay-m" type="number" inputmode="numeric" min="0" ${withValue ? `value="${r}"` : `placeholder="${r}"`} data-in="paym" data-r="${r}"></label>
+    <div class="seg">${modeChips(payMode)}</div><p class="hint" id="pay-rendre"></p>
+    ${laterSwitch('pay-later', '')}`;
+}
+// Interrupteur « pas de monnaie sur place » : n'apparaît que s'il y a de la monnaie à rendre
+const laterSwitch = (id, attrs) => `<label class="switch later" id="${id}-row" hidden><input type="checkbox" id="${id}" ${attrs}><span class="sw"></span><span>Pas de monnaie sur place<small>À rendre plus tard, le pressing la doit au client</small></span></label>`;
+
+// Carte affichée tant que le pressing doit de la monnaie au client
+function monnaieHTML(c) {
+  const md = monnaieDue(c);
+  if (!md) return '';
+  const p = c.paiements.find(x => x.monnaieDue);
+  return `<section class="card monnaie-card"><p><b>Monnaie à rendre au client : ${money(md)}</b><br><small>Il a donné ${money(p.recu)} le ${fDate(p.date)}, il n'y avait pas la monnaie.</small></p>
+    <button class="btn btn-p block" data-a="monnaieok" data-id="${c.id}" data-confirm="Confirmer : ${money(md)} rendus">${I.check} Monnaie rendue</button></section>`;
 }
 
 function remiseHTML(c, r) {
@@ -814,6 +878,7 @@ function vCommande(id, q) {
       <div class="btn-row"><button class="btn btn-p" data-a="print" data-id="${c.id}">${I.print} Imprimer le ticket</button><a class="btn btn-g" ${waAttrs(cl.tel, recuTexte(c))}>${I.chat} Reçu par WhatsApp</a></div></section>`;
   }
   if (!annule) h += stepsHTML(c);
+  h += monnaieHTML(c);
   h += actionHTML(c, cl, r);
 
   h += `<section class="card"><div class="cli-top"><div><b>${esc(cl.nom)}</b><span class="muted">${esc(cl.tel || 'Pas de téléphone')}</span></div>${cl.id ? `<a class="btn-t" href="#/client/${cl.id}">Fiche client</a>` : ''}</div>
@@ -831,8 +896,14 @@ function vCommande(id, q) {
     </div>${c.note ? `<p class="note" style="margin-top:8px">${esc(c.note)}</p>` : ''}</section>`;
 
   if (c.paiements.length) {
+    const detail = x => {
+      if (!x.monnaie) return esc(x.mode);
+      return `${esc(x.mode)}, reçu ${money(x.recu)}, ` + (x.monnaieDue
+        ? `<span class="warn">${money(x.monnaie)} à rendre</span>`
+        : `rendu ${money(x.monnaie)}${x.monnaieRendueLe && dayOf(x.monnaieRendueLe) !== dayOf(x.date) ? ' le ' + fDate(x.monnaieRendueLe) : ''}`);
+    };
     h += `<section class="card"><h2>Paiements</h2><ul class="pl">${c.paiements.map(x =>
-      `<li><span>${fDateH(x.date)}<small>${esc(x.mode)}</small></span><b>${money(x.montant)}</b><button class="icon-btn sm" data-a="paydel" data-id="${c.id}" data-p="${x.id}" data-confirm="Supprimer ?" aria-label="Supprimer ce paiement">${I.x}</button></li>`).join('')}</ul></section>`;
+      `<li><span>${fDateH(x.date)}<small>${detail(x)}</small></span><b>${money(x.montant)}</b><button class="icon-btn sm" data-a="paydel" data-id="${c.id}" data-p="${x.id}" data-confirm="Supprimer ?" aria-label="Supprimer ce paiement">${I.x}</button></li>`).join('')}</ul></section>`;
   }
   if (r > 0 && !annule && c.statut !== 'pret' && ui.remise !== c.id) h += payHTML(c, r);
 
@@ -858,7 +929,7 @@ function vCommande(id, q) {
 function newForm(clientId) {
   const cl = clientId ? client(clientId) : null;
   return {editId: null, clientId: cl ? cl.id : null, tel: cl ? cl.tel : '', nom: cl ? cl.nom : '', lignes: [], express: false, remise: 0,
-    date: addDays(+S.settings.delai || 0), note: '', avance: '', mode: 'Espèces', service: S.services[0].id, noteOpen: {}};
+    date: addDays(+S.settings.delai || 0), note: '', avance: '', mode: 'Espèces', monnaieLater: false, service: S.services[0].id, noteOpen: {}};
 }
 function editForm(c) {
   const cl = client(c.clientId) || {};
@@ -910,7 +981,10 @@ function updateTotals() {
     r.textContent = p ? `déjà payé ${money(p)}` : '';
   } else {
     r.textContent = av > 0 ? `reste ${money(Math.max(0, t.total - av))} après avance` : (t.total ? 'sans avance' : '');
-    if (rd) rd.textContent = av > t.total && t.total > 0 ? `Monnaie à rendre : ${money(av - t.total)}` : '';
+    const rendre = av > t.total && t.total > 0 ? av - t.total : 0;
+    if (rd) rd.textContent = rendre ? `Monnaie à rendre : ${money(rendre)}` : '';
+    const lr = $('#f-later-row');
+    if (lr) lr.hidden = !rendre;
   }
   F.lignes.forEach(l => { const e = document.getElementById('lt-' + l.k); if (e) e.textContent = money(l.qte * l.pu); });
   const parts = [];
@@ -966,10 +1040,11 @@ function vDepot(id, q) {
     </section>
 
     ${id ? '' : `<section class="sect"><h2>Avance</h2>
-      <div class="grid2"><label class="fld"><span>Montant reçu (F)</span><input id="f-avance" type="number" inputmode="numeric" min="0" data-in="favance" value="${esc(F.avance)}" placeholder="0"></label>
+      <div class="grid2"><label class="fld"><span>Somme donnée (F)</span><input id="f-avance" type="number" inputmode="numeric" min="0" data-in="favance" value="${esc(F.avance)}" placeholder="0"></label>
         <div class="fld"><button class="btn btn-l" data-a="ftout">Tout payer</button></div></div>
       <div class="seg">${modeChips(F.mode, 'fmode')}</div>
       <p class="hint" id="f-rendre"></p>
+      ${laterSwitch('f-later', `data-ch="flater" ${F.monnaieLater ? 'checked' : ''}`)}
     </section>`}
 
     <p class="fdetail" id="f-detail"></p>
@@ -1013,11 +1088,13 @@ function fsave() {
     brut: t.brut, maj: t.maj, remise: t.rem, total: t.total, dateDepot: now, dateRetraitPrevue: F.date, note: F.note.trim(),
     statut: 'depose', historique: [{statut: 'depose', date: now}], paiements: [], datePret: null, dateRetrait: null, notifieLe: null};
   s.nextNum++;
-  const av = Math.min(Math.round(+F.avance || 0), t.total);
-  if (av > 0) c.paiements.push({id: uid(), montant: av, mode: F.mode, date: now});
+  const donne = Math.round(+F.avance || 0);
+  let pay = null;
+  if (donne > 0 && t.total > 0) { pay = nouveauPaiement(t.total, donne, F.mode, F.monnaieLater); pay.date = now; if (pay.monnaieRendueLe) pay.monnaieRendueLe = now; c.paiements.push(pay); }
   S.commandes.push(c);
   save();
   F = null;
+  if (pay && pay.monnaie) toastPaiement(pay, 'Dépôt enregistré');
   location.hash = `#/commande/${c.id}?nouveau=1`;
 }
 
@@ -1195,6 +1272,7 @@ function ticketHTML(c, cl = client(c.clientId) || {}) {
     <div class="tk-tot b"><span>TOTAL</span><span>${moneyT(c.total)}</span></div>
     <div class="tk-tot"><span>Payé</span><span>${moneyT(p)}</span></div>
     <div class="tk-tot b"><span>${r ? 'RESTE À PAYER' : 'RÉGLÉ'}</span><span>${r ? moneyT(r) : ''}</span></div>
+    ${monnaieDue(c) ? `<div class="tk-sep"></div><div class="tk-tot b"><span>MONNAIE À VOUS RENDRE</span><span>${moneyT(monnaieDue(c))}</span></div>` : ''}
     <div class="tk-sep"></div>
     <div class="tk-rdv">Retrait prévu le <b>${fDate(c.dateRetraitPrevue)}</b></div>
     ${s.qr ? `<div class="tk-qr">${qrSVG(ticketURL(c), (PAPIER[s.largeur] || PAPIER[58]).qr)}${whatsappPressing() ? '<small>Scannez pour nous écrire sur WhatsApp</small>' : ''}</div>` : ''}
@@ -1295,27 +1373,34 @@ const A = {
   notif(el) { const c = cmd(el.dataset.id); c.notifieLe = new Date().toISOString(); save(); setTimeout(render, 400); },
   remettre(el) {
     const c = cmd(el.dataset.id), r = reste(c);
-    let rendre = 0;
+    let pay = null;
     if (el.dataset.pay === '1') {
       const m = Math.round(+$('#pay-m').value || 0);
-      if (m <= 0) { toast('Indiquez le montant reçu', 'err'); $('#pay-m').focus(); return; }
-      const rec = Math.min(m, r);
-      rendre = m - rec;
-      c.paiements.push({id: uid(), montant: rec, mode: payMode, date: new Date().toISOString()});
+      if (m <= 0) { toast('Indiquez la somme donnée par le client', 'err'); $('#pay-m').focus(); return; }
+      pay = nouveauPaiement(r, m, payMode, $('#pay-later')?.checked);
+      c.paiements.push(pay);
     }
     ui.remise = null;
     setStatut(c, 'retire');
     const rr = reste(c);
-    toast(rendre > 0 ? `Linge remis. Monnaie à rendre : ${money(rendre)}` : rr > 0 ? `Linge remis. Reste dû : ${money(rr)}` : 'Linge remis au client');
+    if (pay && pay.monnaie) toastPaiement(pay, 'Linge remis');
+    else toast(rr > 0 ? `Linge remis. Reste dû : ${money(rr)}` : 'Linge remis au client');
     render();
   },
   encaisser(el) {
     const c = cmd(el.dataset.id), r = reste(c), m = Math.round(+$('#pay-m').value || 0);
-    if (m <= 0) { toast('Indiquez le montant reçu', 'err'); $('#pay-m').focus(); return; }
-    const rec = Math.min(m, r);
-    c.paiements.push({id: uid(), montant: rec, mode: payMode, date: new Date().toISOString()});
+    if (m <= 0) { toast('Indiquez la somme donnée par le client', 'err'); $('#pay-m').focus(); return; }
+    const pay = nouveauPaiement(r, m, payMode, $('#pay-later')?.checked);
+    c.paiements.push(pay);
     save();
-    toast(m > rec ? `Encaissé. Monnaie à rendre : ${money(m - rec)}` : `${money(rec)} encaissés`);
+    toastPaiement(pay, pay.monnaie ? 'Encaissé' : '');
+    render();
+  },
+  monnaieok(el) {
+    const c = cmd(el.dataset.id), now = new Date().toISOString(), md = monnaieDue(c);
+    c.paiements.forEach(p => { if (p.monnaieDue) { p.monnaieDue = false; p.monnaieRendueLe = now; } });
+    save();
+    toast(`${money(md)} de monnaie rendus au client`);
     render();
   },
   paydel(el) { const c = cmd(el.dataset.id); c.paiements = c.paiements.filter(p => p.id !== el.dataset.p); save(); toast('Paiement supprimé'); render(); },
@@ -1406,6 +1491,8 @@ const IN = {
   paym(el) {
     const r = +el.dataset.r, m = Math.round(+el.value || 0), out = $('#pay-rendre');
     out.textContent = m > r ? `Monnaie à rendre : ${money(m - r)}` : (m > 0 && m < r ? `Il restera ${money(r - m)} à payer` : '');
+    const lr = $('#pay-later-row');
+    if (lr) { lr.hidden = !(m > r); if (lr.hidden) $('#pay-later').checked = false; }
   },
   ftel(el) { F.tel = el.value; suggest(); },
   fnom(el) { F.nom = el.value; suggest(); },
@@ -1420,6 +1507,7 @@ const IN = {
 
 /* ---------- Changements (change) ---------- */
 const CH = {
+  flater(el) { F.monnaieLater = el.checked; },
   cdate(el) {
     const v = el.value, today = dISO();
     if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return;
