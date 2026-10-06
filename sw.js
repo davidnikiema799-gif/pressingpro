@@ -1,7 +1,7 @@
 // PressingPro — service worker
 // À chaque mise à jour de l'app, change le numéro de version ci-dessous
 // pour forcer le rafraîchissement du cache sur les téléphones.
-const CACHE = 'pressingpro-v1.1.0';
+const CACHE = 'pressingpro-v1.2.0';
 const SHELL = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png', './icon-maskable-512.png'];
 
 self.addEventListener('install', e => {

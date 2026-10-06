@@ -169,8 +169,14 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--bleu);outline-of
 /* Caisse façon ticket de caisse */
 .receipt{position:relative;background:var(--card);padding:16px 16px 20px;margin:24px 0 30px;filter:drop-shadow(0 0 1px rgba(21,33,44,.28))}
 .receipt::after{content:'';position:absolute;left:0;right:0;bottom:-9px;height:10px;background:linear-gradient(135deg,var(--card) 50%,transparent 50%) 0 0/14px 10px repeat-x,linear-gradient(225deg,var(--card) 50%,transparent 50%) 0 0/14px 10px repeat-x}
-.receipt-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
+.receipt-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px}
 .receipt-head .seg{margin:0}
+.chip svg{width:16px;height:16px;margin:0 5px -3px -2px}
+.period{font-size:14px;color:var(--ink-2);margin:0 0 10px}
+.date-nav{display:flex;align-items:center;gap:6px;margin:6px 0 4px}
+.date-nav input{flex:1;text-align:center;font-weight:600}
+.date-nav .icon-btn{border:1px solid var(--line);color:var(--bleu)}
+.date-nav .icon-btn:disabled{color:var(--line);cursor:default}
 .rl{display:flex;align-items:baseline;gap:8px;padding:5px 0;color:inherit;text-decoration:none}
 .rl span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .rl i{flex:1;min-width:12px;border-bottom:2px dotted var(--line);transform:translateY(-4px)}
@@ -338,7 +344,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 </script>
 <script>
 'use strict';
-const VERSION = '1.1.0';
+const VERSION = '1.2.0';
 
 /* ---------- Petits outils ---------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -350,6 +356,7 @@ const sum = a => a.reduce((x, y) => x + (+y || 0), 0);
 const z2 = n => String(n).padStart(2, '0');
 const dISO = (d = new Date()) => d.getFullYear() + '-' + z2(d.getMonth() + 1) + '-' + z2(d.getDate());
 const addDays = n => { const x = new Date(); x.setDate(x.getDate() + n); return dISO(x); };
+const addDaysFrom = (iso, n) => { const x = new Date(iso + 'T12:00:00'); x.setDate(x.getDate() + n); return dISO(x); };
 const toDate = iso => iso.length === 10 ? new Date(iso + 'T12:00:00') : new Date(iso);
 const fDate = iso => { if (!iso) return ''; const d = toDate(iso); return z2(d.getDate()) + '/' + z2(d.getMonth() + 1) + '/' + d.getFullYear(); };
 const fDateH = iso => { if (!iso) return ''; const d = new Date(iso); return fDate(iso) + ' à ' + z2(d.getHours()) + 'h' + z2(d.getMinutes()); };
@@ -366,6 +373,8 @@ const I = {
   users:'<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14.8c1.8.8 3 2.5 3.5 5.2"/></svg>',
   sliders:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>',
   back:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>',
+  next:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>',
+  cal:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>',
   search:'<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg>',
   phone:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/></svg>',
   chat:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 0 1-11.8 7L4 20l1.1-4A8 8 0 1 1 20 12z"/></svg>',
@@ -463,7 +472,7 @@ function save() {
 
 /* ---------- État de l'écran ---------- */
 let S = null, F = null;
-let periode = 'jour', cmdFilter = 'encours', cmdQ = '', cmdLimit = 60, cliQ = '', payMode = 'Espèces';
+let periode = 'jour', caisseDate = addDays(-1), cmdFilter = 'encours', cmdQ = '', cmdLimit = 60, cliQ = '', payMode = 'Espèces';
 let pendingImport = null, deferredInstall = null, installLater = false;
 const standalone = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
 const ui = {remise: null};
@@ -588,10 +597,17 @@ function notFound(msg) {
 }
 
 /* ---------- Accueil ---------- */
-function stats(per) {
+// Bornes [début, fin] d'une période de caisse, en jours ISO (AAAA-MM-JJ), fin incluse
+function bornes(per) {
   const today = dISO();
-  const from = per === 'jour' ? today : per === 'semaine' ? addDays(-6) : today.slice(0, 8) + '01';
-  const inP = iso => iso && dayOf(iso) >= from;
+  if (per === 'semaine') return [addDays(-6), today];
+  if (per === 'mois') return [today.slice(0, 8) + '01', today];
+  if (per === 'date') return [caisseDate, caisseDate];
+  return [today, today];
+}
+function stats(per) {
+  const [from, to] = bornes(per);
+  const inP = iso => { if (!iso) return false; const d = dayOf(iso); return d >= from && d <= to; };
   const act = actives(), pays = [];
   act.forEach(c => c.paiements.forEach(p => { if (inP(p.date)) pays.push(p); }));
   const byMode = {};
@@ -603,12 +619,40 @@ function stats(per) {
     remis: act.filter(c => c.statut === 'retire' && inP(c.dateRetrait)).length
   };
 }
+// Premier jour où l'app a enregistré quelque chose : on ne propose pas de remonter avant
+function premierJour() {
+  let min = dISO();
+  S.commandes.forEach(c => {
+    if (dayOf(c.dateDepot) < min) min = dayOf(c.dateDepot);
+    c.paiements.forEach(p => { if (p.date && dayOf(p.date) < min) min = dayOf(p.date); });
+  });
+  return min;
+}
+const jourLong = iso => { const s = toDate(iso).toLocaleDateString('fr-FR', {weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'}); return s.charAt(0).toUpperCase() + s.slice(1); };
+function ilYa(iso) {
+  const n = daysBetween(iso, dISO());
+  return n === 0 ? "aujourd'hui" : n === 1 ? 'hier' : `il y a ${n} jours`;
+}
 
 function caisseHTML() {
-  const st = stats(periode), imp = sum(actives().map(reste));
+  const st = stats(periode), imp = sum(actives().map(reste)), today = dISO();
   const P = {jour: "Aujourd'hui", semaine: '7 jours', mois: 'Ce mois'};
+  const [from, to] = bornes(periode);
+  let quand;
+  if (periode === 'date') {
+    const min = premierJour();
+    quand = `<div class="date-nav">
+        <button class="icon-btn" data-a="cprev" aria-label="Jour précédent" ${caisseDate <= min ? 'disabled' : ''}>${I.back}</button>
+        <input id="c-date" type="date" data-ch="cdate" value="${caisseDate}" min="${min}" max="${today}" aria-label="Date à consulter">
+        <button class="icon-btn" data-a="cnext" aria-label="Jour suivant" ${caisseDate >= today ? 'disabled' : ''}>${I.next}</button>
+      </div>
+      <p class="period">${jourLong(caisseDate)}, ${ilYa(caisseDate)}</p>`;
+  } else {
+    quand = `<p class="period">${from === to ? jourLong(from) : `Du ${fDate(from)} au ${fDate(to)}`}</p>`;
+  }
   return `<section class="receipt" aria-label="Caisse">
-    <div class="receipt-head"><h2>Caisse</h2><div class="seg">${Object.entries(P).map(([k, v]) => `<button class="chip sm ${periode === k ? 'on' : ''}" data-a="periode" data-id="${k}">${v}</button>`).join('')}</div></div>
+    <div class="receipt-head"><h2>Caisse</h2><div class="seg">${Object.entries(P).map(([k, v]) => `<button class="chip sm ${periode === k ? 'on' : ''}" data-a="periode" data-id="${k}">${v}</button>`).join('')}<button class="chip sm ${periode === 'date' ? 'on' : ''}" data-a="periode" data-id="date">${I.cal}${periode === 'date' ? fDate(caisseDate).slice(0, 5) : 'Autre date'}</button></div></div>
+    ${quand}
     <div class="rl big"><span>Encaissé</span><i></i><b>${money(st.encaisse)}</b></div>
     ${MODES.map(m => `<div class="rl sub"><span>${m}</span><i></i><b>${money(st.byMode[m] || 0)}</b></div>`).join('')}
     <hr class="dash">
@@ -617,7 +661,7 @@ function caisseHTML() {
     <div class="rl"><span>Valeur des dépôts</span><i></i><b>${money(st.ca)}</b></div>
     <div class="rl"><span>Remis aux clients</span><i></i><b>${st.remis}</b></div>
     <hr class="dash">
-    <a class="rl link" href="#/commandes/impaye"><span>Impayés à encaisser</span><i></i><b class="${imp ? 'due' : ''}">${money(imp)}</b></a>
+    <a class="rl link" href="#/commandes/impaye"><span>Impayés en cours</span><i></i><b class="${imp ? 'due' : ''}">${money(imp)}</b></a>
   </section>`;
 }
 
@@ -1226,7 +1270,17 @@ async function exporter(mode) {
 
 /* ---------- Actions (clics) ---------- */
 const A = {
-  periode(el) { periode = el.dataset.id; render(); },
+  periode(el) {
+    const was = periode;
+    periode = el.dataset.id;
+    if (periode === 'date' && caisseDate < premierJour()) caisseDate = premierJour();
+    render();
+    // Premier appui sur « Autre date » (ou nouvel appui dessus) : on ouvre directement le calendrier
+    if (periode === 'date') { const d = $('#c-date'); try { d.showPicker(); } catch (e) { d.focus(); } }
+    else if (was === 'date') $('.receipt')?.scrollIntoView({block: 'nearest'});
+  },
+  cprev() { caisseDate = addDaysFrom(caisseDate, -1); render(); },
+  cnext() { const n = addDaysFrom(caisseDate, 1); caisseDate = n > dISO() ? dISO() : n; render(); },
   cfilter(el) { cmdFilter = el.dataset.id; cmdQ = ''; cmdLimit = 60; location.hash = '#/commandes/' + cmdFilter; },
   more() { cmdLimit += 60; $('#cmd-list').innerHTML = cmdListHTML(); },
 
@@ -1366,6 +1420,12 @@ const IN = {
 
 /* ---------- Changements (change) ---------- */
 const CH = {
+  cdate(el) {
+    const v = el.value, today = dISO();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return;
+    caisseDate = v > today ? today : v;
+    render();
+  },
   lsvc(el) {
     const l = line(el.dataset.k), sv = svc(el.value);
     l.serviceId = sv.id; l.serviceNom = sv.nom;
