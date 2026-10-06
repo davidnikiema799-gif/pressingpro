@@ -235,6 +235,11 @@ hr.dash{border:0;border-top:2px dashed var(--line);margin:10px 0}
 .rl.tiroir span{font-weight:600}
 .rl.tiroir b{font-size:24px;color:var(--ink)}
 .rl b.warn{color:var(--ambre)}
+.receipt .btn.block{margin-top:4px}
+.sect-t{margin:24px 0 0}
+.so-h{display:flex;justify-content:space-between;gap:10px}
+.so-row .so-m{white-space:nowrap;font:600 18px var(--cond)}
+.so-row{padding-right:6px}
 .sticky-foot{position:sticky;bottom:calc(var(--nav-h) + env(safe-area-inset-bottom) + 10px);display:flex;align-items:center;gap:12px;margin:18px -4px 0;padding:10px 10px 10px 16px;background:var(--ink);color:#fff;border-radius:12px;z-index:5}
 .tot{flex:1;display:flex;flex-direction:column;line-height:1.1;min-width:0}
 .tot span{font-size:13px;opacity:.7}
@@ -353,7 +358,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 </script>
 <script>
 'use strict';
-const VERSION = '1.3.0';
+const VERSION = '1.4.0';
 
 /* ---------- Petits outils ---------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -428,6 +433,7 @@ function defaultState() {
     services,
     articles: base.map(([nom, a, b, c]) => ({id: uid(), nom, prix: {lr: a, rp: b, ns: c}})),
     clients: [],
+    depenses: [],
     commandes: []
   };
 }
@@ -438,6 +444,7 @@ function migrate(d) {
   d.services = Array.isArray(d.services) && d.services.length ? d.services : def.services;
   d.articles = Array.isArray(d.articles) ? d.articles : def.articles;
   d.clients = Array.isArray(d.clients) ? d.clients : [];
+  d.depenses = Array.isArray(d.depenses) ? d.depenses : [];
   d.commandes = (Array.isArray(d.commandes) ? d.commandes : []).map(c => ({lignes: [], paiements: [], historique: [], ...c}));
   d.v = 1;
   return d;
@@ -655,11 +662,14 @@ function stats(per) {
     if (inP(p.date)) recues += p.recu || p.montant;
     if (p.monnaie && !p.monnaieDue && inP(p.monnaieRendueLe || p.date)) rendue += p.monnaie;
   }));
+  // Sorties de caisse : seules celles payées en espèces sortent du tiroir
+  const sorties = S.depenses.filter(d => inP(d.date));
+  const sortiesEsp = sum(sorties.filter(d => d.mode === 'Espèces').map(d => d.montant));
   return {
     encaisse: sum(pays.map(p => p.montant)), byMode,
     nbDep: dep.length, nbArt: sum(dep.map(nbArt)), ca: sum(dep.map(c => c.total)),
     remis: act.filter(c => c.statut === 'retire' && inP(c.dateRetrait)).length,
-    recues, rendue, tiroir: recues - rendue
+    recues, rendue, sortiesEsp, sortiesTotal: sum(sorties.map(d => d.montant)), tiroir: recues - rendue - sortiesEsp
   };
 }
 // Premier jour où l'app a enregistré quelque chose : on ne propose pas de remonter avant
@@ -669,6 +679,7 @@ function premierJour() {
     if (dayOf(c.dateDepot) < min) min = dayOf(c.dateDepot);
     c.paiements.forEach(p => { if (p.date && dayOf(p.date) < min) min = dayOf(p.date); });
   });
+  S.depenses.forEach(d => { if (dayOf(d.date) < min) min = dayOf(d.date); });
   return min;
 }
 const jourLong = iso => { const s = toDate(iso).toLocaleDateString('fr-FR', {weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'}); return s.charAt(0).toUpperCase() + s.slice(1); };
@@ -702,8 +713,10 @@ function caisseHTML() {
     <h3 class="rl-h">Tiroir espèces</h3>
     <div class="rl"><span>Reçu des clients</span><i></i><b>${money(st.recues)}</b></div>
     <div class="rl"><span>Monnaie rendue</span><i></i><b>${st.rendue ? '− ' : ''}${money(st.rendue)}</b></div>
+    <a class="rl link" href="#/sorties"><span>Sorties de caisse</span><i></i><b>${st.sortiesEsp ? '−\u00a0' : ''}${money(st.sortiesEsp)}</b></a>
     <div class="rl tiroir"><span>Doit être dans le tiroir</span><i></i><b>${money(st.tiroir)}</b></div>
-    <p class="period">En plus du fond de caisse du matin.</p>
+    <p class="period">${st.tiroir < 0 ? `Soit ${money(-st.tiroir)} de moins que le fond de caisse du matin : plus de sorties que de rentrées.` : 'En plus du fond de caisse du matin.'}${st.sortiesTotal > st.sortiesEsp ? ` Dépenses payées par mobile money : ${money(st.sortiesTotal - st.sortiesEsp)}.` : ''}</p>
+    <a class="btn btn-l block sm" href="#/sorties">${I.minus} Enregistrer une sortie de caisse</a>
     <hr class="dash">
     <div class="rl"><span>Dépôts reçus</span><i></i><b>${st.nbDep}</b></div>
     <div class="rl"><span>Articles reçus</span><i></i><b>${st.nbArt}</b></div>
@@ -1396,6 +1409,23 @@ const A = {
     toastPaiement(pay, pay.monnaie ? 'Encaissé' : '');
     render();
   },
+  // Sorties de caisse
+  somotif(el) { SO.motif = el.dataset.id; el.parentElement.querySelectorAll('.chip').forEach(b => b.classList.toggle('on', b === el)); },
+  somode(el) { SO.mode = el.dataset.id; el.parentElement.querySelectorAll('.chip').forEach(b => b.classList.toggle('on', b === el)); },
+  sosave() {
+    const m = Math.round(+SO.montant || 0), today = dISO();
+    if (m <= 0) { toast('Indiquez le montant de la sortie', 'err'); $('#so-m').focus(); return; }
+    if (!SO.motif) { toast('Choisissez le motif de la sortie', 'err'); return; }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(SO.date) || SO.date > today) { toast('Choisissez une date passée ou aujourd\'hui', 'err'); $('#so-date').focus(); return; }
+    // Aujourd'hui : on garde l'heure. Jour passé : on garde seulement la date.
+    S.depenses.push({id: uid(), date: SO.date === today ? new Date().toISOString() : SO.date, montant: m, motif: SO.motif, note: SO.note.trim(), mode: SO.mode});
+    save();
+    toast(`Sortie de ${money(m)} enregistrée`);
+    SO = newSortie();
+    render();
+  },
+  sodel(el) { S.depenses = S.depenses.filter(d => d.id !== el.dataset.id); save(); toast('Sortie supprimée'); render(); },
+  somore() { sortiesLimit += 40; render(); },
   monnaieok(el) {
     const c = cmd(el.dataset.id), now = new Date().toISOString(), md = monnaieDue(c);
     c.paiements.forEach(p => { if (p.monnaieDue) { p.monnaieDue = false; p.monnaieRendueLe = now; } });
@@ -1502,7 +1532,10 @@ const IN = {
   fdate(el) { F.date = el.value; },
   fremise(el) { F.remise = Math.max(0, Math.round(+el.value || 0)); updateTotals(); },
   fnote(el) { F.note = el.value; },
-  favance(el) { F.avance = el.value; updateTotals(); }
+  favance(el) { F.avance = el.value; updateTotals(); },
+  som(el) { SO.montant = el.value; },
+  sonote(el) { SO.note = el.value; },
+  sodate(el) { SO.date = el.value; }
 };
 
 /* ---------- Changements (change) ---------- */
@@ -1565,6 +1598,45 @@ const CH = {
     rd.readAsText(f);
   }
 };
+
+/* ---------- Sorties de caisse ---------- */
+// Tout argent qui sort du pressing : sans ça, le tiroir ne peut pas concorder avec la caisse.
+const MOTIFS = ['Produits de lavage', 'Électricité, eau', "Main-d'œuvre", 'Transport', 'Retrait du patron', 'Autre'];
+let SO = null, sortiesLimit = 40;
+const newSortie = () => ({montant: '', motif: '', note: '', mode: 'Espèces', date: dISO()});
+
+function vSorties() {
+  if (!SO) SO = newSortie();
+  const today = dISO();
+  let h = `<header class="bar"><a class="icon-btn" href="#/accueil" aria-label="Retour à l'accueil">${I.back}</a><h1>Sorties de caisse</h1></header>
+    <p class="hint">Achats, factures, paiement d'un aide, argent pris par le patron : notez tout ce qui sort, et le tiroir concordera avec la caisse.</p>
+    <section class="card"><h2>Nouvelle sortie</h2>
+      <label class="fld"><span>Montant (F)</span><input id="so-m" type="number" inputmode="numeric" min="1" data-in="som" value="${esc(SO.montant)}" placeholder="0"></label>
+      <div class="fld"><span>Motif</span><div class="seg" role="group" aria-label="Motif">${MOTIFS.map(m => `<button type="button" class="chip ${SO.motif === m ? 'on' : ''}" data-a="somotif" data-id="${esc(m)}">${esc(m)}</button>`).join('')}</div></div>
+      <label class="fld"><span>Détail (facultatif)</span><input data-in="sonote" value="${esc(SO.note)}" placeholder="Ex. : 2 sacs de lessive"></label>
+      <div class="fld"><span>Payé en</span><div class="seg" role="group" aria-label="Payé en">${modeChips(SO.mode, 'somode')}</div></div>
+      <label class="fld"><span>Date</span><input id="so-date" type="date" data-in="sodate" value="${SO.date}" max="${today}"></label>
+      <button class="btn btn-p block" data-a="sosave">${I.minus} Enregistrer la sortie</button>
+    </section>`;
+
+  const list = [...S.depenses].sort((a, b) => b.date.localeCompare(a.date));
+  if (!list.length) return h + `<p class="muted pad">Aucune sortie enregistrée pour le moment.</p>`;
+  const shown = list.slice(0, sortiesLimit), jours = [];
+  shown.forEach(d => {
+    const j = dayOf(d.date);
+    if (!jours.length || jours[jours.length - 1].j !== j) jours.push({j, items: []});
+    jours[jours.length - 1].items.push(d);
+  });
+  h += `<h2 class="sect-t">Dernières sorties</h2>`;
+  jours.forEach(({j, items}) => {
+    const tot = sum(S.depenses.filter(d => dayOf(d.date) === j).map(d => d.montant));
+    h += `<h3 class="grp-h so-h"><span>${jourLong(j)}</span><span>− ${money(tot)}</span></h3>
+      <div class="list">${items.map(d => `<div class="row so-row"><span class="row-main"><b>${esc(d.motif)}</b><small>${d.note ? esc(d.note) + ', ' : ''}${esc(d.mode)}${d.date.length > 10 ? ', ' + fDateH(d.date).split(' à ')[1] : ''}</small></span>
+        <b class="so-m">− ${money(d.montant)}</b><button class="icon-btn sm" data-a="sodel" data-id="${d.id}" data-confirm="Supprimer ?" aria-label="Supprimer cette sortie">${I.x}</button></div>`).join('')}</div>`;
+  });
+  if (list.length > sortiesLimit) h += `<button class="btn btn-l block" style="margin-top:12px" data-a="somore">Afficher plus (${list.length - sortiesLimit} restantes)</button>`;
+  return h;
+}
 
 /* ---------- Ticket scanné (lien du QR code) ---------- */
 function vTicket(numEnc, q, oid) {
@@ -1658,7 +1730,7 @@ function parseHash() {
   const [name, id, id2] = path.split('/');
   return {name: name || 'accueil', id, id2, q: Object.fromEntries(new URLSearchParams(qs || ''))};
 }
-const VIEWS = {accueil: vAccueil, commandes: vCommandes, commande: vCommande, depot: vDepot, clients: vClients, client: vClient, reglages: vReglages, tarifs: vTarifs, t: vTicket, scan: vScan};
+const VIEWS = {accueil: vAccueil, commandes: vCommandes, commande: vCommande, depot: vDepot, clients: vClients, client: vClient, reglages: vReglages, tarifs: vTarifs, t: vTicket, scan: vScan, sorties: vSorties};
 const NAV = [['accueil', 'Accueil', 'home'], ['commandes', 'Commandes', 'list'], ['depot', 'Dépôt', 'plus'], ['clients', 'Clients', 'users'], ['reglages', 'Réglages', 'sliders']];
 let lastHash = null;
 
@@ -1666,7 +1738,7 @@ function render() {
   const r = parseHash(), fn = VIEWS[r.name] || vAccueil;
   if (r.name !== 'scan') stopScan();
   $('#view').innerHTML = fn(r.id, r.q, r.id2);
-  const cur = {commande: 'commandes', client: 'clients', tarifs: 'reglages', scan: 'accueil'}[r.name] || r.name;
+  const cur = {commande: 'commandes', client: 'clients', tarifs: 'reglages', scan: 'accueil', sorties: 'accueil'}[r.name] || r.name;
   // La page « ticket » vue par un client n'affiche pas la navigation du pressing
   $('#nav').hidden = r.name === 't' && !S.commandes.length;
   $('#nav').innerHTML = NAV.map(([k, label, ic]) => `<a href="#/${k}" ${k === cur ? 'aria-current="page"' : ''}>${k === 'depot' ? `<span class="plus">${I[ic]}</span>` : I[ic]}<span>${label}</span></a>`).join('');
