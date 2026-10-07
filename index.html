@@ -253,6 +253,29 @@ hr.dash{border:0;border-top:2px dashed var(--line);margin:10px 0}
 .hist tbody tr.on{background:var(--bleu-2)}
 .hist tbody th button{background:none;border:0;padding:0;font:inherit;font-weight:600;color:var(--bleu);cursor:pointer}
 .bilan-note{margin:16px 4px 8px}
+.pin-etat{display:flex;align-items:center;gap:6px;color:var(--vert)}
+.pin-etat svg{width:18px;height:18px}
+.bar .btn-t svg{width:18px;height:18px;margin-right:4px}
+.pad{display:flex;flex-direction:column;align-items:center;text-align:center;padding:0 0 16px}
+.pad>p{max-width:34ch}
+.pad-ico{width:56px;height:56px;border-radius:50%;background:var(--bleu-2);color:var(--bleu);display:grid;place-items:center;margin-bottom:10px}
+.pad-ico svg{width:26px;height:26px}
+.pad h2{font-size:22px;margin-bottom:4px}
+.dots{display:flex;gap:18px;margin:20px 0 6px}
+.dots span{width:16px;height:16px;border-radius:50%;border:2px solid var(--ink-2)}
+.dots span.on{background:var(--ink);border-color:var(--ink)}
+.dots.shake{animation:shake .35s}
+@keyframes shake{20%,60%{transform:translateX(-8px)}40%,80%{transform:translateX(8px)}}
+.pad-msg{min-height:22px;font-size:15px;color:var(--ink-2);margin:4px 0 10px}
+.pad-msg.err{color:var(--rouge);font-weight:600}
+.keys{display:grid;grid-template-columns:repeat(3,72px);gap:12px 24px;justify-content:center;margin-bottom:10px}
+.keys button{width:72px;height:72px;border-radius:50%;border:1px solid var(--line);background:var(--card);font:600 30px var(--cond);color:var(--ink);cursor:pointer;display:grid;place-items:center}
+.keys button:active{background:var(--bleu-2);border-color:var(--bleu)}
+.keys .k-alt{border:0;background:none;color:var(--ink-2)}
+.keys .k-alt svg{width:30px;height:30px}
+.rescue{font:700 34px var(--cond);letter-spacing:3px;background:var(--tag);color:var(--tag-ink);padding:10px 20px;border-radius:8px;margin:12px 0}
+.secours-fld{width:100%;text-align:left;margin-top:14px}
+.secours-fld input{text-align:center;font:600 22px var(--cond);letter-spacing:3px}
 .so-h{display:flex;justify-content:space-between;gap:10px}
 .so-row .so-m{white-space:nowrap;font:600 18px var(--cond)}
 .so-row{padding-right:6px}
@@ -374,7 +397,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 </script>
 <script>
 'use strict';
-const VERSION = '1.5.0';
+const VERSION = '1.6.0';
 
 /* ---------- Petits outils ---------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -404,6 +427,8 @@ const I = {
   sliders:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>',
   back:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>',
   next:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>',
+  lock:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>',
+  del:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11v12H9l-6-6z"/><path d="M12.5 10l4 4M16.5 10l-4 4"/></svg>',
   chart:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h16"/><path d="M7 16v-4M12 16V8M17 16v-7"/></svg>',
   cal:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>',
   search:'<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg>',
@@ -443,7 +468,7 @@ function defaultState() {
       nom: 'Mon pressing', tel: '', adresse: '',
       pied: 'Merci de votre confiance ! Vérifiez votre linge avant de quitter le pressing.',
       delai: 3, expressPct: 50, joursOubli: 30, indicatif: '226', prefixe: 'P', nextNum: 1,
-      largeur: 58, etiquette: true, qr: true, lastBackup: null,
+      largeur: 58, etiquette: true, qr: true, pin: null, lastBackup: null,
       msgPret: 'Bonjour {client}, votre linge (ticket {ticket}) est prêt ! Vous pouvez passer le récupérer au {pressing}. {reste}',
       msgRelance: 'Bonjour {client}, votre linge (ticket {ticket}) vous attend au {pressing} depuis le {date_pret}. Merci de passer le récupérer. {reste}'
     },
@@ -733,7 +758,7 @@ function caisseHTML() {
     <a class="rl link" href="#/sorties"><span>Sorties de caisse</span><i></i><b>${st.sortiesEsp ? '−\u00a0' : ''}${money(st.sortiesEsp)}</b></a>
     <div class="rl tiroir"><span>Doit être dans le tiroir</span><i></i><b>${money(st.tiroir)}</b></div>
     <p class="period">${st.tiroir < 0 ? `Soit ${money(-st.tiroir)} de moins que le fond de caisse du matin : plus de sorties que de rentrées.` : 'En plus du fond de caisse du matin.'}${st.sortiesTotal > st.sortiesEsp ? ` Dépenses payées par mobile money : ${money(st.sortiesTotal - st.sortiesEsp)}.` : ''}</p>
-    <div class="btn-row caisse-btns"><a class="btn btn-l sm" href="#/sorties">${I.minus} Sortie de caisse</a><a class="btn btn-l sm" href="#/bilan">${I.chart} Bilan du mois</a></div>
+    <div class="btn-row caisse-btns"><a class="btn btn-l sm" href="#/sorties">${I.minus} Sortie de caisse</a><a class="btn btn-l sm" href="#/bilan">${S.settings.pin ? I.lock : I.chart} Bilan du mois</a></div>
     <hr class="dash">
     <div class="rl"><span>Dépôts reçus</span><i></i><b>${st.nbDep}</b></div>
     <div class="rl"><span>Articles reçus</span><i></i><b>${st.nbArt}</b></div>
@@ -1188,7 +1213,11 @@ function vReglages() {
   if (deferredInstall && !standalone()) h += `<section class="card"><p>Installez PressingPro sur l'écran d'accueil pour l'ouvrir comme une application, même sans internet.</p><button class="btn btn-p" data-a="install">${I.download} Installer l'application</button></section>`;
   else if (!standalone()) h += `<section class="card"><p><b>Installer l'application</b></p><p class="hint">Dans le menu ⋮ de Chrome, touchez « Installer l'application » ou « Ajouter à l'écran d'accueil ». Si l'option n'apparaît pas, l'app est peut-être déjà installée : cherchez l'icône PressingPro sur l'écran d'accueil.</p></section>`;
 
-  h += `<section class="sect"><h2>Bilan</h2><a class="row card-link" href="#/bilan"><span class="row-main"><b>Bilan du mois</b><small>Recettes, dépenses et bénéfice</small></span><span class="chev" aria-hidden="true">›</span></a></section>`;
+  h += `<section class="sect"><h2>Bilan</h2><a class="row card-link" href="#/bilan"><span class="row-main"><b>Bilan du mois</b><small>Recettes, dépenses et bénéfice</small></span><span class="chev" aria-hidden="true">›</span></a>
+    ${s.pin
+      ? `<p class="hint pin-etat">${I.lock} Le bilan est protégé par un code à 4 chiffres.</p><div class="btn-row"><a class="btn btn-l sm" href="#/code/changer">Changer le code</a><a class="btn btn-l sm" href="#/code/supprimer">Supprimer le code</a></div>`
+      : `<p class="hint">Le bilan est ouvert à tous. Ajoutez un code pour que seul le patron puisse voir le bénéfice.</p><a class="btn btn-l sm" href="#/code/creer">${I.lock} Protéger par un code</a>`}
+  </section>`;
 
   h += `<section class="sect"><h2>Le pressing</h2>
     ${f('nom', 'Nom du pressing', 'autocomplete="organization"')}
@@ -1447,6 +1476,36 @@ const A = {
   somore() { sortiesLimit += 40; render(); },
   // Retour : page précédente de l'app si on vient d'une autre page de l'app, sinon l'accueil
   retour() { if (navInterne > 0) history.back(); else location.hash = '#/accueil'; },
+  // Pavé du code
+  key(el) {
+    if (!pad || pad.busy) return;
+    const att = Math.ceil((padBloque - Date.now()) / 1000);
+    if (att > 0) { pad.err = true; pad.msg = `Trop d'essais. Attendez ${att} seconde${att > 1 ? 's' : ''}.`; render(); return; }
+    if (pad.buf.length >= 4) return;
+    pad.buf += el.dataset.id; pad.err = false; pad.msg = '';
+    if (pad.buf.length === 4) { pad.busy = true; render(); setTimeout(() => padValider().finally(() => { if (pad) pad.busy = false; }), 120); }
+    else render();
+  },
+  keydel() { if (pad && !pad.busy) { pad.buf = pad.buf.slice(0, -1); pad.err = false; pad.msg = ''; render(); } },
+  oubli() { pad.mode = 'oubli'; pad.msg = ''; pad.err = false; render(); $('#pad-secours')?.focus(); },
+  padretour() { pad.mode = 'check'; pad.msg = ''; pad.err = false; render(); },
+  async secoursok() {
+    const att = Math.ceil((padBloque - Date.now()) / 1000);
+    if (att > 0) { pad.err = true; pad.msg = `Trop d'essais. Attendez ${att} secondes.`; render(); return; }
+    if (await verifierSecours($('#pad-secours').value)) {
+      padEssais = 0;
+      const but = pad.but;
+      S.settings.pin = null; save();
+      toast('Code supprimé. Créez-en un nouveau dans Réglages.');
+      if (but === 'bilan') { bilanOuvert = true; pad = null; render(); } else location.hash = '#/reglages';
+    } else {
+      padEssais++;
+      if (padEssais >= 5) { padEssais = 0; padBloque = Date.now() + 30000; }
+      pad.err = true; pad.msg = 'Code de secours incorrect.'; render(); $('#pad-secours')?.focus();
+    }
+  },
+  padfin() { pad = null; toast('Code créé : le bilan est protégé'); location.hash = '#/reglages'; },
+  verrou() { bilanOuvert = false; render(); },
   bmois(el) { bilanMois = el.dataset.id; render(); window.scrollTo(0, 0); },
   bprev() { bilanMois = moisDecale(bilanMois, -1); render(); },
   bnext() { const n = moisDecale(bilanMois, 1); if (n <= dISO().slice(0, 7)) { bilanMois = n; render(); } },
@@ -1702,7 +1761,131 @@ function bilan(from, to) {
   };
 }
 
+/* ---------- Code du bilan ----------
+   Le code n'est jamais enregistré en clair : on garde seulement son empreinte (SHA-256 + sel).
+   C'est un verrou de discrétion (empêcher un employé de voir le bénéfice), pas un coffre-fort :
+   les données restent sur le téléphone et dans les sauvegardes. */
+let pad = null, bilanOuvert = false, padEssais = 0, padBloque = 0;
+const ALPHA_SECOURS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+const hasard = n => { const a = new Uint32Array(n); crypto.getRandomValues(a); return [...a]; };
+async function empreinte(algo, sel, code) {
+  const txt = sel + ':' + code;
+  if (algo === 'sha256') {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(txt));
+    return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+  let h = 0x811c9dc5;  // repli si la page n'est pas en https (crypto.subtle absent)
+  for (const ch of txt) { h ^= ch.charCodeAt(0); h = Math.imul(h, 0x01000193) >>> 0; }
+  return h.toString(16);
+}
+const algoDispo = () => (window.crypto && crypto.subtle ? 'sha256' : 'fnv');
+const normSecours = s => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+async function verifierCode(code) {
+  const p = S.settings.pin;
+  if (!p) return false;
+  if (p.algo === 'sha256' && algoDispo() !== 'sha256') { toast("Ouvrez l'application depuis son adresse https pour vérifier le code", 'err'); return false; }
+  return (await empreinte(p.algo, p.sel, code)) === p.hash;
+}
+const nouveauSel = () => hasard(4).map(n => n.toString(36)).join('');
+async function nouveauCode(code, garderSecours) {
+  const algo = algoDispo(), old = S.settings.pin, sel = nouveauSel();
+  const pin = {algo, sel, hash: await empreinte(algo, sel, code)};
+  let secours = null;
+  if (garderSecours && old) Object.assign(pin, {secours: old.secours, selSecours: old.selSecours, algoSecours: old.algoSecours});
+  else {
+    secours = hasard(8).map(n => ALPHA_SECOURS[n % ALPHA_SECOURS.length]).join('');
+    pin.selSecours = nouveauSel();
+    pin.algoSecours = algo;
+    pin.secours = await empreinte(algo, pin.selSecours, secours);
+  }
+  S.settings.pin = pin;
+  save();
+  return secours && secours.slice(0, 4) + '-' + secours.slice(4);
+}
+async function verifierSecours(saisie) {
+  const p = S.settings.pin;
+  return !!p && (await empreinte(p.algoSecours, p.selSecours, normSecours(saisie))) === p.secours;
+}
+// Codes refusés : chiffres identiques (0000) et suites (1234, 9876…)
+function codeTropFacile(c) {
+  if (/^(\d)\1{3}$/.test(c)) return true;
+  const d = [...c].map(Number), pas = d[1] - d[0];
+  return Math.abs(pas) === 1 && d.every((x, i) => i === 0 || x - d[i - 1] === pas);
+}
+
+function padPour(but) {
+  if (!pad || pad.route !== location.hash) pad = {route: location.hash, but, mode: but === 'creer' ? 'new1' : 'check', buf: '', premier: '', msg: '', err: false};
+  return pad;
+}
+const TITRES = {
+  check: {bilan: ['Bilan protégé', 'Entrez le code à 4 chiffres'], changer: ['Changer le code', "Entrez d'abord le code actuel"], supprimer: ['Supprimer le code', 'Entrez le code actuel pour confirmer']},
+  new1: {creer: ['Protéger le bilan', 'Choisissez un code à 4 chiffres'], changer: ['Nouveau code', 'Choisissez le nouveau code à 4 chiffres']},
+  new2: ['Confirmez le code', 'Tapez le même code une deuxième fois']
+};
+function padHTML() {
+  const p = pad, back = `<header class="bar"><button class="icon-btn" data-a="retour" aria-label="Retour">${I.back}</button></header>`;
+  if (p.mode === 'secours-affiche') {
+    return back + `<section class="pad"><div class="pad-ico">${I.lock}</div><h2>Le bilan est protégé</h2>
+      <p>Voici votre <b>code de secours</b>. Il ouvre le bilan si vous oubliez votre code.</p>
+      <div class="rescue">${esc(p.secours)}</div>
+      <p class="hint">Notez-le sur papier et gardez-le chez vous, pas dans ce téléphone. Il ne sera plus jamais affiché.</p>
+      <button class="btn btn-p block" data-a="padfin">C'est noté</button></section>`;
+  }
+  if (p.mode === 'oubli') {
+    return back + `<section class="pad"><div class="pad-ico">${I.lock}</div><h2>Code oublié</h2>
+      <p class="muted">Entrez le code de secours de 8 caractères reçu à la création du code.</p>
+      <label class="fld secours-fld"><span>Code de secours</span><input id="pad-secours" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="XXXX-XXXX" maxlength="9"></label>
+      <p class="pad-msg ${p.err ? 'err' : ''}" role="alert">${esc(p.msg)}</p>
+      <button class="btn btn-p block" data-a="secoursok">Valider</button>
+      <button class="btn-t block" data-a="padretour">Revenir au code</button></section>`;
+  }
+  const t = p.mode === 'new2' ? TITRES.new2 : TITRES[p.mode][p.but];
+  return back + `<section class="pad"><div class="pad-ico">${I.lock}</div><h2>${t[0]}</h2><p class="muted">${t[1]}</p>
+    <div class="dots ${p.err ? 'shake' : ''}" aria-label="${p.buf.length} chiffre${p.buf.length > 1 ? 's' : ''} sur 4">${[0, 1, 2, 3].map(i => `<span class="${i < p.buf.length ? 'on' : ''}"></span>`).join('')}</div>
+    <p class="pad-msg ${p.err ? 'err' : ''}" role="alert">${esc(p.msg)}</p>
+    <div class="keys">${[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => `<button data-a="key" data-id="${n}">${n}</button>`).join('')}<span></span><button data-a="key" data-id="0">0</button><button class="k-alt" data-a="keydel" aria-label="Effacer le dernier chiffre">${I.del}</button></div>
+    ${p.mode === 'check' ? `<button class="btn-t" data-a="oubli">Code oublié ?</button>` : ''}</section>`;
+}
+async function padValider() {
+  const p = pad, code = p.buf;
+  p.buf = ''; p.err = false; p.msg = '';
+  if (p.mode === 'check') {
+    if (await verifierCode(code)) {
+      padEssais = 0;
+      if (p.but === 'bilan') { bilanOuvert = true; pad = null; }
+      else if (p.but === 'changer') { p.mode = 'new1'; }
+      else if (p.but === 'supprimer') { S.settings.pin = null; save(); toast('Code supprimé : le bilan est ouvert à tous'); location.hash = '#/reglages'; return; }
+    } else {
+      padEssais++;
+      p.err = true;
+      if (navigator.vibrate) navigator.vibrate(120);
+      if (padEssais >= 5) { padEssais = 0; padBloque = Date.now() + 30000; p.msg = "Trop d'essais. Attendez 30 secondes."; }
+      else p.msg = `Code incorrect (${5 - padEssais} essai${5 - padEssais > 1 ? 's' : ''} restant${5 - padEssais > 1 ? 's' : ''})`;
+    }
+  } else if (p.mode === 'new1') {
+    if (codeTropFacile(code)) { p.err = true; p.msg = 'Code trop facile à deviner. Choisissez-en un autre.'; }
+    else { p.premier = code; p.mode = 'new2'; }
+  } else if (p.mode === 'new2') {
+    if (code !== p.premier) { p.mode = 'new1'; p.premier = ''; p.err = true; p.msg = 'Les deux codes sont différents. Recommencez.'; }
+    else if (p.but === 'creer') { p.secours = await nouveauCode(code, false); p.mode = 'secours-affiche'; }
+    else { await nouveauCode(code, true); toast('Code modifié'); location.hash = '#/reglages'; return; }
+  }
+  render();
+}
+
+// #/code/creer, #/code/changer, #/code/supprimer (depuis Réglages)
+function vCode(but) {
+  const pin = S.settings.pin;
+  if (!['creer', 'changer', 'supprimer'].includes(but) || (but === 'creer' ? pin : !pin) && !(pad && pad.mode === 'secours-affiche')) {
+    setTimeout(() => location.replace('#/reglages'), 0);
+    return '';
+  }
+  padPour(but);
+  return padHTML();
+}
+
 function vBilan() {
+  if (S.settings.pin && !bilanOuvert) { padPour('bilan'); return padHTML(); }
   const today = dISO(), cur = today.slice(0, 7), first = premierJour().slice(0, 7);
   if (bilanMois > cur) bilanMois = cur;
   const ym = bilanMois, fin = finMois(ym), enCours = ym === cur, to = enCours ? today : fin;
@@ -1723,7 +1906,7 @@ function vBilan() {
   const periode = enCours ? `Mois en cours, du 1er au ${parseInt(today.slice(8), 10)} ${moisSeul(ym)}` : `Du 1er au ${parseInt(fin.slice(8), 10)} ${moisSeul(ym)}`;
   const perte = b.benefice < 0;
 
-  let h = `<header class="bar"><button class="icon-btn" data-a="retour" aria-label="Retour">${I.back}</button><h1>Bilan du mois</h1></header>
+  let h = `<header class="bar"><button class="icon-btn" data-a="retour" aria-label="Retour">${I.back}</button><h1>Bilan du mois</h1>${S.settings.pin ? `<span class="bar-end"><button class="btn-t" data-a="verrou">${I.lock} Verrouiller</button></span>` : ''}</header>
     <div class="date-nav">
       <button class="icon-btn" data-a="bprev" aria-label="Mois précédent" ${ym <= first ? 'disabled' : ''}>${I.back}</button>
       <input type="month" data-ch="bmonth" value="${ym}" min="${first}" max="${cur}" aria-label="Mois à afficher">
@@ -1871,7 +2054,7 @@ function parseHash() {
   const [name, id, id2] = path.split('/');
   return {name: name || 'accueil', id, id2, q: Object.fromEntries(new URLSearchParams(qs || ''))};
 }
-const VIEWS = {accueil: vAccueil, commandes: vCommandes, commande: vCommande, depot: vDepot, clients: vClients, client: vClient, reglages: vReglages, tarifs: vTarifs, t: vTicket, scan: vScan, sorties: vSorties, bilan: vBilan};
+const VIEWS = {accueil: vAccueil, commandes: vCommandes, commande: vCommande, depot: vDepot, clients: vClients, client: vClient, reglages: vReglages, tarifs: vTarifs, t: vTicket, scan: vScan, sorties: vSorties, bilan: vBilan, code: vCode};
 const NAV = [['accueil', 'Accueil', 'home'], ['commandes', 'Commandes', 'list'], ['depot', 'Dépôt', 'plus'], ['clients', 'Clients', 'users'], ['reglages', 'Réglages', 'sliders']];
 let lastHash = null;
 
@@ -1879,7 +2062,7 @@ function render() {
   const r = parseHash(), fn = VIEWS[r.name] || vAccueil;
   if (r.name !== 'scan') stopScan();
   $('#view').innerHTML = fn(r.id, r.q, r.id2);
-  const cur = {commande: 'commandes', client: 'clients', tarifs: 'reglages', scan: 'accueil', sorties: 'accueil', bilan: 'accueil'}[r.name] || r.name;
+  const cur = {commande: 'commandes', client: 'clients', tarifs: 'reglages', scan: 'accueil', sorties: 'accueil', bilan: 'accueil', code: 'reglages'}[r.name] || r.name;
   // La page « ticket » vue par un client n'affiche pas la navigation du pressing
   $('#nav').hidden = r.name === 't' && !S.commandes.length;
   $('#nav').innerHTML = NAV.map(([k, label, ic]) => `<a href="#/${k}" ${k === cur ? 'aria-current="page"' : ''}>${k === 'depot' ? `<span class="plus">${I[ic]}</span>` : I[ic]}<span>${label}</span></a>`).join('');
@@ -1915,13 +2098,22 @@ document.addEventListener('click', e => {
 });
 document.addEventListener('input', e => { const k = e.target.dataset && e.target.dataset.in; if (k && IN[k]) IN[k](e.target, e); });
 document.addEventListener('change', e => { const k = e.target.dataset && e.target.dataset.ch; if (k && CH[k]) CH[k](e.target, e); });
+// Application mise en arrière-plan : le bilan se reverrouille
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && bilanOuvert) { bilanOuvert = false; if (parseHash().name === 'bilan') render(); }
+});
 document.addEventListener('keydown', e => {
+  if (document.querySelector('.keys') && !/INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) {
+    if (/^\d$/.test(e.key)) { e.preventDefault(); A.key({dataset: {id: e.key}}); return; }
+    if (e.key === 'Backspace') { e.preventDefault(); A.keydel(); return; }
+  }
+  if (e.key === 'Enter' && e.target.id === 'pad-secours') { A.secoursok(); return; }
   if (e.key === 'Enter' && e.target.id === 'q-home') {
     const rows = document.querySelectorAll('#home-res .row');
     if (rows.length === 1) location.hash = rows[0].getAttribute('href');
   }
 });
-window.addEventListener('hashchange', () => { navInterne++; ui.remise = null; if (parseHash().name !== 'reglages') pendingImport = null; render(); });
+window.addEventListener('hashchange', () => { navInterne++; pad = null; if (parseHash().name !== 'bilan') bilanOuvert = false; ui.remise = null; if (parseHash().name !== 'reglages') pendingImport = null; render(); });
 // On garde la proposition d'installation de Chrome pour l'afficher nous-mêmes sur l'accueil
 window.addEventListener('beforeinstallprompt', e => {
   e.preventDefault();
