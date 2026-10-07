@@ -237,6 +237,22 @@ hr.dash{border:0;border-top:2px dashed var(--line);margin:10px 0}
 .rl b.warn{color:var(--ambre)}
 .receipt .btn.block{margin-top:4px}
 .sect-t{margin:24px 0 0}
+.caisse-btns{margin:8px 0 0}
+.caisse-btns .btn{flex:1 1 0;padding:0 10px}
+.rl span small{color:var(--ink-2);font-weight:400}
+.rl.perte span,.rl.perte b{color:var(--rouge)}
+.cmp{font-size:14px;font-weight:600;margin:2px 0 0;text-align:right}
+.cmp.up{color:var(--vert)}
+.cmp.down{color:var(--rouge)}
+.hist{width:100%;border-collapse:collapse;font-size:14px;margin-top:4px}
+.hist th,.hist td{padding:9px 4px;text-align:right;border-top:1px solid var(--line);white-space:nowrap}
+.hist thead th{border-top:0;color:var(--ink-2);font-weight:500;font-size:13px}
+.hist th:first-child{text-align:left}
+.hist td{font:600 16px var(--cond)}
+.hist tbody tr{cursor:pointer}
+.hist tbody tr.on{background:var(--bleu-2)}
+.hist tbody th button{background:none;border:0;padding:0;font:inherit;font-weight:600;color:var(--bleu);cursor:pointer}
+.bilan-note{margin:16px 4px 8px}
 .so-h{display:flex;justify-content:space-between;gap:10px}
 .so-row .so-m{white-space:nowrap;font:600 18px var(--cond)}
 .so-row{padding-right:6px}
@@ -358,7 +374,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 </script>
 <script>
 'use strict';
-const VERSION = '1.4.0';
+const VERSION = '1.5.0';
 
 /* ---------- Petits outils ---------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -388,6 +404,7 @@ const I = {
   sliders:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>',
   back:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>',
   next:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>',
+  chart:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h16"/><path d="M7 16v-4M12 16V8M17 16v-7"/></svg>',
   cal:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>',
   search:'<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg>',
   phone:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/></svg>',
@@ -488,7 +505,7 @@ function save() {
 
 /* ---------- État de l'écran ---------- */
 let S = null, F = null;
-let periode = 'jour', caisseDate = addDays(-1), cmdFilter = 'encours', cmdQ = '', cmdLimit = 60, cliQ = '', payMode = 'Espèces';
+let periode = 'jour', caisseDate = addDays(-1), bilanMois = dISO().slice(0, 7), navInterne = 0, cmdFilter = 'encours', cmdQ = '', cmdLimit = 60, cliQ = '', payMode = 'Espèces';
 let pendingImport = null, deferredInstall = null, installLater = false;
 const standalone = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
 const ui = {remise: null};
@@ -716,7 +733,7 @@ function caisseHTML() {
     <a class="rl link" href="#/sorties"><span>Sorties de caisse</span><i></i><b>${st.sortiesEsp ? '−\u00a0' : ''}${money(st.sortiesEsp)}</b></a>
     <div class="rl tiroir"><span>Doit être dans le tiroir</span><i></i><b>${money(st.tiroir)}</b></div>
     <p class="period">${st.tiroir < 0 ? `Soit ${money(-st.tiroir)} de moins que le fond de caisse du matin : plus de sorties que de rentrées.` : 'En plus du fond de caisse du matin.'}${st.sortiesTotal > st.sortiesEsp ? ` Dépenses payées par mobile money : ${money(st.sortiesTotal - st.sortiesEsp)}.` : ''}</p>
-    <a class="btn btn-l block sm" href="#/sorties">${I.minus} Enregistrer une sortie de caisse</a>
+    <div class="btn-row caisse-btns"><a class="btn btn-l sm" href="#/sorties">${I.minus} Sortie de caisse</a><a class="btn btn-l sm" href="#/bilan">${I.chart} Bilan du mois</a></div>
     <hr class="dash">
     <div class="rl"><span>Dépôts reçus</span><i></i><b>${st.nbDep}</b></div>
     <div class="rl"><span>Articles reçus</span><i></i><b>${st.nbArt}</b></div>
@@ -1171,6 +1188,8 @@ function vReglages() {
   if (deferredInstall && !standalone()) h += `<section class="card"><p>Installez PressingPro sur l'écran d'accueil pour l'ouvrir comme une application, même sans internet.</p><button class="btn btn-p" data-a="install">${I.download} Installer l'application</button></section>`;
   else if (!standalone()) h += `<section class="card"><p><b>Installer l'application</b></p><p class="hint">Dans le menu ⋮ de Chrome, touchez « Installer l'application » ou « Ajouter à l'écran d'accueil ». Si l'option n'apparaît pas, l'app est peut-être déjà installée : cherchez l'icône PressingPro sur l'écran d'accueil.</p></section>`;
 
+  h += `<section class="sect"><h2>Bilan</h2><a class="row card-link" href="#/bilan"><span class="row-main"><b>Bilan du mois</b><small>Recettes, dépenses et bénéfice</small></span><span class="chev" aria-hidden="true">›</span></a></section>`;
+
   h += `<section class="sect"><h2>Le pressing</h2>
     ${f('nom', 'Nom du pressing', 'autocomplete="organization"')}
     ${f('tel', 'Téléphone', 'type="tel" inputmode="tel"')}
@@ -1426,6 +1445,11 @@ const A = {
   },
   sodel(el) { S.depenses = S.depenses.filter(d => d.id !== el.dataset.id); save(); toast('Sortie supprimée'); render(); },
   somore() { sortiesLimit += 40; render(); },
+  // Retour : page précédente de l'app si on vient d'une autre page de l'app, sinon l'accueil
+  retour() { if (navInterne > 0) history.back(); else location.hash = '#/accueil'; },
+  bmois(el) { bilanMois = el.dataset.id; render(); window.scrollTo(0, 0); },
+  bprev() { bilanMois = moisDecale(bilanMois, -1); render(); },
+  bnext() { const n = moisDecale(bilanMois, 1); if (n <= dISO().slice(0, 7)) { bilanMois = n; render(); } },
   monnaieok(el) {
     const c = cmd(el.dataset.id), now = new Date().toISOString(), md = monnaieDue(c);
     c.paiements.forEach(p => { if (p.monnaieDue) { p.monnaieDue = false; p.monnaieRendueLe = now; } });
@@ -1541,6 +1565,12 @@ const IN = {
 /* ---------- Changements (change) ---------- */
 const CH = {
   flater(el) { F.monnaieLater = el.checked; },
+  bmonth(el) {
+    const v = el.value, cur = dISO().slice(0, 7);
+    if (!/^\d{4}-\d{2}$/.test(v)) return;
+    bilanMois = v > cur ? cur : v;
+    render();
+  },
   cdate(el) {
     const v = el.value, today = dISO();
     if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return;
@@ -1601,7 +1631,7 @@ const CH = {
 
 /* ---------- Sorties de caisse ---------- */
 // Tout argent qui sort du pressing : sans ça, le tiroir ne peut pas concorder avec la caisse.
-const MOTIFS = ['Produits de lavage', 'Électricité, eau', "Main-d'œuvre", 'Transport', 'Retrait du patron', 'Autre'];
+const MOTIFS = ['Produits de lavage', 'Électricité, eau', 'Loyer', "Main-d'œuvre", 'Réparations', 'Transport', 'Retrait du patron', 'Autre'];
 let SO = null, sortiesLimit = 40;
 const newSortie = () => ({montant: '', motif: '', note: '', mode: 'Espèces', date: dISO()});
 
@@ -1635,6 +1665,117 @@ function vSorties() {
         <b class="so-m">− ${money(d.montant)}</b><button class="icon-btn sm" data-a="sodel" data-id="${d.id}" data-confirm="Supprimer ?" aria-label="Supprimer cette sortie">${I.x}</button></div>`).join('')}</div>`;
   });
   if (list.length > sortiesLimit) h += `<button class="btn btn-l block" style="margin-top:12px" data-a="somore">Afficher plus (${list.length - sortiesLimit} restantes)</button>`;
+  return h;
+}
+
+/* ---------- Bilan du mois ----------
+   Bénéfice « de trésorerie » : l'argent réellement reçu pendant le mois, moins les sorties de caisse
+   (hors retraits du patron, qui ne sont pas une dépense du pressing mais une part du bénéfice). */
+const moisDecale = (ym, n) => { const [y, m] = ym.split('-').map(Number); const d = new Date(y, m - 1 + n, 1); return d.getFullYear() + '-' + z2(d.getMonth() + 1); };
+const finMois = ym => { const [y, m] = ym.split('-').map(Number); return dISO(new Date(y, m, 0)); };
+const moisSeul = ym => { const [y, m] = ym.split('-').map(Number); return new Date(y, m - 1, 15).toLocaleDateString('fr-FR', {month: 'long'}); };
+const nomMois = (ym, court) => { const [y, m] = ym.split('-').map(Number); const s = new Date(y, m - 1, 15).toLocaleDateString('fr-FR', court ? {month: 'short', year: '2-digit'} : {month: 'long', year: 'numeric'}); return s.charAt(0).toUpperCase() + s.slice(1); };
+const nb = n => Math.round(+n || 0).toLocaleString('fr-FR').replace(/[  ]/g, ' ');
+
+function bilan(from, to) {
+  const inR = iso => { if (!iso) return false; const d = dayOf(iso); return d >= from && d <= to; };
+  const act = actives(), byMode = {};
+  let recettes = 0;
+  act.forEach(c => c.paiements.forEach(p => { if (inR(p.date)) { recettes += p.montant; byMode[p.mode] = (byMode[p.mode] || 0) + p.montant; } }));
+  const sorties = S.depenses.filter(d => inR(d.date)), byMotif = {};
+  const retraits = sum(sorties.filter(d => d.motif === 'Retrait du patron').map(d => d.montant));
+  sorties.filter(d => d.motif !== 'Retrait du patron').forEach(d => byMotif[d.motif] = (byMotif[d.motif] || 0) + d.montant);
+  const depenses = sum(Object.values(byMotif));
+  const dep = act.filter(c => inR(c.dateDepot)), arts = {}, svcs = {};
+  dep.forEach(c => c.lignes.forEach(l => {
+    const a = arts[l.nom] || (arts[l.nom] = {qte: 0, val: 0});
+    a.qte += l.qte; a.val += l.qte * l.pu;
+    svcs[l.serviceNom] = (svcs[l.serviceNom] || 0) + l.qte * l.pu;
+  }));
+  const premier = {};
+  act.forEach(c => { if (!premier[c.clientId] || c.dateDepot < premier[c.clientId]) premier[c.clientId] = c.dateDepot; });
+  return {
+    recettes, byMode, depenses, byMotif, retraits, benefice: recettes - depenses,
+    nbDep: dep.length, nbArt: sum(dep.map(nbArt)), ca: sum(dep.map(c => c.total)), resteDep: sum(dep.map(reste)),
+    arts, svcs, clientsServis: new Set(dep.map(c => c.clientId)).size, nouveaux: Object.values(premier).filter(inR).length,
+    vide: !recettes && !sorties.length && !dep.length
+  };
+}
+
+function vBilan() {
+  const today = dISO(), cur = today.slice(0, 7), first = premierJour().slice(0, 7);
+  if (bilanMois > cur) bilanMois = cur;
+  const ym = bilanMois, fin = finMois(ym), enCours = ym === cur, to = enCours ? today : fin;
+  const b = bilan(ym + '-01', to);
+
+  // Comparaison : mois précédent, sur la même période si le mois est en cours (du 1er au même jour)
+  const pym = moisDecale(ym, -1), pFin = finMois(pym);
+  let pTo = pFin;
+  if (enCours) { const cand = pym + '-' + today.slice(8); pTo = cand < pFin ? cand : pFin; }
+  const pb = pym >= first ? bilan(pym + '-01', pTo) : null;
+  let cmp = '';
+  if (pb && !pb.vide) {
+    const diff = b.benefice - pb.benefice;
+    // Un pourcentage n'a de sens que si les deux mois sont bénéficiaires (sinon « −952 % » ne dit rien)
+    const pct = pb.benefice > 0 && b.benefice >= 0 ? ` (${diff >= 0 ? '+' : '−'}${Math.abs(Math.round(diff / pb.benefice * 100))} %)` : '';
+    cmp = `<p class="cmp ${diff >= 0 ? 'up' : 'down'}">${diff >= 0 ? '+' : '−'} ${money(Math.abs(diff))}${pct} par rapport à ${moisSeul(pym)}${enCours ? `, du 1er au ${parseInt(pTo.slice(8), 10)}` : ''}</p>`;
+  }
+  const periode = enCours ? `Mois en cours, du 1er au ${parseInt(today.slice(8), 10)} ${moisSeul(ym)}` : `Du 1er au ${parseInt(fin.slice(8), 10)} ${moisSeul(ym)}`;
+  const perte = b.benefice < 0;
+
+  let h = `<header class="bar"><button class="icon-btn" data-a="retour" aria-label="Retour">${I.back}</button><h1>Bilan du mois</h1></header>
+    <div class="date-nav">
+      <button class="icon-btn" data-a="bprev" aria-label="Mois précédent" ${ym <= first ? 'disabled' : ''}>${I.back}</button>
+      <input type="month" data-ch="bmonth" value="${ym}" min="${first}" max="${cur}" aria-label="Mois à afficher">
+      <button class="icon-btn" data-a="bnext" aria-label="Mois suivant" ${ym >= cur ? 'disabled' : ''}>${I.next}</button>
+    </div>
+    <p class="period">${nomMois(ym)}. ${periode}.</p>`;
+  if (b.vide) h += `<p class="card empty">Aucune recette, dépense ni dépôt enregistré pour ce mois.</p>`;
+
+  h += `<section class="receipt" aria-label="Bénéfice">
+    <div class="rl"><span>Recettes</span><i></i><b>${money(b.recettes)}</b></div>
+    ${MODES.filter(m => b.byMode[m]).map(m => `<div class="rl sub"><span>${m}</span><i></i><b>${money(b.byMode[m])}</b></div>`).join('')}
+    <div class="rl"><span>Dépenses</span><i></i><b>${b.depenses ? '− ' : ''}${money(b.depenses)}</b></div>
+    ${Object.entries(b.byMotif).sort((x, y) => y[1] - x[1]).map(([k, v]) => `<div class="rl sub"><span>${esc(k)}</span><i></i><b>${money(v)}</b></div>`).join('')}
+    <hr class="dash">
+    <div class="rl big ${perte ? 'perte' : ''}"><span>${perte ? 'Perte' : 'Bénéfice'}</span><i></i><b>${money(Math.abs(b.benefice))}</b></div>
+    ${cmp}
+    <hr class="dash">
+    <div class="rl"><span>Retraits du patron</span><i></i><b>${b.retraits ? '− ' : ''}${money(b.retraits)}</b></div>
+    <div class="rl tiroir ${b.benefice - b.retraits < 0 ? 'perte' : ''}"><span>Reste au pressing</span><i></i><b>${money(b.benefice - b.retraits)}</b></div>
+    <p class="period">Le bénéfice, moins l'argent pris par le patron.</p>
+  </section>`;
+
+  h += `<section class="card"><h2>Activité</h2>
+    <div class="rl"><span>Dépôts reçus</span><i></i><b>${b.nbDep}</b></div>
+    <div class="rl"><span>Articles reçus</span><i></i><b>${b.nbArt}</b></div>
+    <div class="rl"><span>Valeur des dépôts</span><i></i><b>${money(b.ca)}</b></div>
+    <div class="rl"><span>Panier moyen</span><i></i><b>${money(b.nbDep ? b.ca / b.nbDep : 0)}</b></div>
+    <div class="rl"><span>Clients servis</span><i></i><b>${b.clientsServis}</b></div>
+    <div class="rl sub"><span>dont nouveaux clients</span><i></i><b>${b.nouveaux}</b></div>
+    <div class="rl"><span>Encore impayé</span><i></i><b class="${b.resteDep ? 'due' : ''}">${money(b.resteDep)}</b></div>
+  </section>`;
+
+  const top = Object.entries(b.arts).sort((x, y) => y[1].val - x[1].val).slice(0, 5);
+  h += `<section class="card"><h2>Ce qui rapporte le plus</h2>${top.length
+    ? `<p class="hint">Valeur des articles déposés ce mois-ci, hors express et remises.</p>
+      ${top.map(([k, a]) => `<div class="rl"><span>${esc(k)} <small>× ${a.qte}</small></span><i></i><b>${money(a.val)}</b></div>`).join('')}
+      <h3 class="rl-h">Par service</h3>
+      ${Object.entries(b.svcs).sort((x, y) => y[1] - x[1]).map(([k, v]) => `<div class="rl sub"><span>${esc(k)}</span><i></i><b>${money(v)}</b></div>`).join('')}`
+    : '<p class="muted">Aucun dépôt ce mois-ci.</p>'}</section>`;
+
+  // Historique : 6 derniers mois (sans remonter avant le premier mois enregistré)
+  const mois = [];
+  for (let i = 0; i < 6; i++) { const m = moisDecale(cur, -i); if (m < first) break; mois.push(m); }
+  h += `<section class="card"><h2>${mois.length > 1 ? `${mois.length} derniers mois` : 'Historique'}</h2>
+    <table class="hist"><thead><tr><th scope="col">Mois</th><th scope="col">Recettes</th><th scope="col">Dépenses</th><th scope="col">Bénéfice</th></tr></thead><tbody>
+    ${mois.map(m => {
+      const x = bilan(m + '-01', m === cur ? today : finMois(m));
+      return `<tr class="${m === ym ? 'on' : ''}" data-a="bmois" data-id="${m}"><th scope="row"><button data-a="bmois" data-id="${m}">${nomMois(m, true)}</button></th><td>${nb(x.recettes)}</td><td>${nb(x.depenses)}</td><td class="${x.benefice < 0 ? 'due' : ''}">${nb(x.benefice)}</td></tr>`;
+    }).join('')}</tbody></table>
+    <p class="hint">Montants en F CFA. Touchez un mois pour l'afficher.</p></section>`;
+
+  h += `<p class="hint bilan-note">Le bénéfice est calculé sur l'argent réellement reçu et dépensé pendant le mois : paiements des clients moins sorties de caisse, hors retraits du patron. Un dépôt impayé ne compte qu'une fois payé, et seules les dépenses notées dans « Sorties de caisse » sont déduites.</p>`;
   return h;
 }
 
@@ -1730,7 +1871,7 @@ function parseHash() {
   const [name, id, id2] = path.split('/');
   return {name: name || 'accueil', id, id2, q: Object.fromEntries(new URLSearchParams(qs || ''))};
 }
-const VIEWS = {accueil: vAccueil, commandes: vCommandes, commande: vCommande, depot: vDepot, clients: vClients, client: vClient, reglages: vReglages, tarifs: vTarifs, t: vTicket, scan: vScan, sorties: vSorties};
+const VIEWS = {accueil: vAccueil, commandes: vCommandes, commande: vCommande, depot: vDepot, clients: vClients, client: vClient, reglages: vReglages, tarifs: vTarifs, t: vTicket, scan: vScan, sorties: vSorties, bilan: vBilan};
 const NAV = [['accueil', 'Accueil', 'home'], ['commandes', 'Commandes', 'list'], ['depot', 'Dépôt', 'plus'], ['clients', 'Clients', 'users'], ['reglages', 'Réglages', 'sliders']];
 let lastHash = null;
 
@@ -1738,7 +1879,7 @@ function render() {
   const r = parseHash(), fn = VIEWS[r.name] || vAccueil;
   if (r.name !== 'scan') stopScan();
   $('#view').innerHTML = fn(r.id, r.q, r.id2);
-  const cur = {commande: 'commandes', client: 'clients', tarifs: 'reglages', scan: 'accueil', sorties: 'accueil'}[r.name] || r.name;
+  const cur = {commande: 'commandes', client: 'clients', tarifs: 'reglages', scan: 'accueil', sorties: 'accueil', bilan: 'accueil'}[r.name] || r.name;
   // La page « ticket » vue par un client n'affiche pas la navigation du pressing
   $('#nav').hidden = r.name === 't' && !S.commandes.length;
   $('#nav').innerHTML = NAV.map(([k, label, ic]) => `<a href="#/${k}" ${k === cur ? 'aria-current="page"' : ''}>${k === 'depot' ? `<span class="plus">${I[ic]}</span>` : I[ic]}<span>${label}</span></a>`).join('');
@@ -1780,7 +1921,7 @@ document.addEventListener('keydown', e => {
     if (rows.length === 1) location.hash = rows[0].getAttribute('href');
   }
 });
-window.addEventListener('hashchange', () => { ui.remise = null; if (parseHash().name !== 'reglages') pendingImport = null; render(); });
+window.addEventListener('hashchange', () => { navInterne++; ui.remise = null; if (parseHash().name !== 'reglages') pendingImport = null; render(); });
 // On garde la proposition d'installation de Chrome pour l'afficher nous-mêmes sur l'accueil
 window.addEventListener('beforeinstallprompt', e => {
   e.preventDefault();
