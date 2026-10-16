@@ -198,6 +198,19 @@ hr.dash{border:0;border-top:2px dashed var(--line);margin:10px 0}
 .art.has{border-color:var(--bleu);box-shadow:inset 0 0 0 1px var(--bleu)}
 .art .badge{position:absolute;top:-7px;right:-7px;min-width:24px;height:24px;border-radius:12px;background:var(--bleu);color:#fff;font:700 15px/24px var(--cond);text-align:center;padding:0 6px;font-style:normal}
 .art-free{border-style:dashed}
+.cats{display:flex;flex-direction:column;gap:8px;margin:0 0 8px}
+.cat{border:1px solid var(--line);border-radius:var(--r);background:var(--card)}
+.cat.open{border-color:var(--bleu);box-shadow:inset 0 0 0 1px var(--bleu)}
+.cat-h{display:flex;align-items:center;gap:10px;width:100%;min-height:56px;padding:0 12px 0 16px;background:none;border:0;font:inherit;color:var(--ink);cursor:pointer;text-align:left;border-radius:var(--r)}
+.cat-n{font-weight:600;font-size:17px}
+.cat-h small{color:var(--ink-2);font-size:14px}
+.cat-b{font-style:normal;margin-left:auto;background:var(--bleu);color:#fff;font-size:13px;font-weight:600;padding:2px 10px;border-radius:999px;white-space:nowrap}
+.cat-chev{margin-left:auto;color:var(--ink-2);display:grid;transition:transform .2s}
+.cat-b + .cat-chev{margin-left:0}
+.cat.open .cat-chev{transform:rotate(90deg);color:var(--bleu)}
+.cat .art-grid{padding:8px 12px 14px;margin:0}
+.tarif-cat{width:auto;flex:none;height:44px;padding:0 6px;font-size:14px}
+.art-libre{width:100%;min-height:52px;flex-direction:row;align-items:center;justify-content:flex-start;gap:10px;margin:0 0 14px}
 .lines{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
 .line{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:10px 12px}
 .line-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
@@ -397,7 +410,7 @@ var qrcode=function(){var t=function(t,r){var e=t,n=g[r],o=null,i=0,a=null,u=[],
 </script>
 <script>
 'use strict';
-const VERSION = '1.6.0';
+const VERSION = '1.7.0';
 
 /* ---------- Petits outils ---------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -452,18 +465,37 @@ const MODES = ['Espèces', 'Orange Money', 'Moov Money'];
 const STATUTS = {depose:'Déposé', traitement:'En traitement', pret:'Prêt', retire:'Retiré', annule:'Annulé'};
 const ORDRE = ['depose', 'traitement', 'pret', 'retire'];
 
+/* Catégories d'articles. « Maison » regroupe le linge qui n'est ni homme, ni femme, ni enfant. */
+const CATS = [{id: 'homme', nom: 'Homme'}, {id: 'femme', nom: 'Femme'}, {id: 'enfant', nom: 'Enfant'}, {id: 'maison', nom: 'Maison'}];
+const catNom = id => (CATS.find(c => c.id === id) || CATS[0]).nom;
+// Prix de départ indicatifs, à ajuster avec le pressing :
+// [nom, lavage + repassage, repassage seul, nettoyage à sec] (0 = service non proposé)
+const CATALOGUE = {
+  homme: [['Chemise', 400, 200, 800], ['Pantalon', 400, 200, 800], ['T-shirt / polo', 300, 150, 0], ['Veste', 800, 400, 1500],
+    ['Costume 2 pièces', 1500, 700, 3000], ['Boubou / complet pagne', 700, 350, 1500], ['Faso Dan Fani', 700, 350, 1500],
+    ['Manteau', 1000, 500, 2000], ['Cravate', 300, 150, 500]],
+  femme: [['Robe', 600, 300, 1200], ['Jupe', 400, 200, 800], ['Chemisier', 400, 200, 800], ['Pantalon', 400, 200, 800],
+    ['Complet pagne', 700, 350, 1500], ['Faso Dan Fani', 700, 350, 1500], ['Tailleur', 1200, 600, 2500], ['Foulard', 200, 100, 400]],
+  enfant: [['Chemise', 250, 150, 500], ['Pantalon / short', 250, 150, 500], ['Robe', 350, 200, 700], ['T-shirt', 200, 100, 0],
+    ['Tenue scolaire', 400, 200, 0]],
+  maison: [['Drap', 500, 250, 0], ['Couverture', 1500, 0, 2500], ['Rideau', 1000, 500, 2000], ['Nappe', 500, 250, 0]]
+};
+const nomLigne = a => S.articles.some(x => x.id !== a.id && x.cat !== a.cat && norm(x.nom) === norm(a.nom)) ? `${a.nom} ${catNom(a.cat).toLowerCase()}` : a.nom;
+const artDe = (cat, [nom, a, b, c]) => ({id: uid(), nom, cat, prix: {lr: a, rp: b, ns: c}});
+// Catégorie devinée pour les articles créés avant la v1.7 (l'utilisateur peut la corriger dans Tarifs)
+function catDevinee(nom) {
+  const n = norm(nom);
+  if (/enfant|bebe|scolaire/.test(n)) return 'enfant';
+  if (/^(drap|couverture|rideau|nappe|taie|serviette|tapis|housse|moustiquaire)/.test(n)) return 'maison';
+  if (/^(robe|jupe|chemisier|foulard|tailleur|pagne|soutien|voile)/.test(n)) return 'femme';
+  return 'homme';
+}
+
 function defaultState() {
   const services = [{id:'lr', nom:'Lavage + repassage'}, {id:'rp', nom:'Repassage seul'}, {id:'ns', nom:'Nettoyage à sec'}];
-  // Prix de départ indicatifs, à ajuster avec le pressing (0 = service non proposé)
-  const base = [
-    ['Chemise', 400, 200, 800], ['Pantalon', 400, 200, 800], ['T-shirt / polo', 300, 150, 0],
-    ['Jupe', 400, 200, 800], ['Robe', 600, 300, 1200], ['Veste', 800, 400, 1500],
-    ['Costume 2 pièces', 1500, 700, 3000], ['Boubou / complet pagne', 700, 350, 1500],
-    ['Faso Dan Fani', 700, 350, 1500], ['Manteau', 1000, 500, 2000], ['Cravate', 300, 150, 500],
-    ['Drap', 500, 250, 0], ['Couverture', 1500, 0, 2500], ['Rideau', 1000, 500, 2000]
-  ];
   return {
     v: 1,
+    catV: 1,
     settings: {
       nom: 'Mon pressing', tel: '', adresse: '',
       pied: 'Merci de votre confiance ! Vérifiez votre linge avant de quitter le pressing.',
@@ -473,7 +505,7 @@ function defaultState() {
       msgRelance: 'Bonjour {client}, votre linge (ticket {ticket}) vous attend au {pressing} depuis le {date_pret}. Merci de passer le récupérer. {reste}'
     },
     services,
-    articles: base.map(([nom, a, b, c]) => ({id: uid(), nom, prix: {lr: a, rp: b, ns: c}})),
+    articles: Object.entries(CATALOGUE).flatMap(([cat, liste]) => liste.map(x => artDe(cat, x))),
     clients: [],
     depenses: [],
     commandes: []
@@ -488,6 +520,17 @@ function migrate(d) {
   d.clients = Array.isArray(d.clients) ? d.clients : [];
   d.depenses = Array.isArray(d.depenses) ? d.depenses : [];
   d.commandes = (Array.isArray(d.commandes) ? d.commandes : []).map(c => ({lignes: [], paiements: [], historique: [], ...c}));
+  // v1.7 : rangement des articles existants par catégorie (prix et noms inchangés),
+  // puis ajout des articles femme et enfant de départ qui manquent
+  if (!d.catV) {
+    d.articles.forEach(a => { if (!CATS.some(c => c.id === a.cat)) a.cat = catDevinee(a.nom); });
+    ['femme', 'enfant'].forEach(cat => {
+      const deja = new Set(d.articles.filter(a => a.cat === cat).map(a => norm(a.nom)));
+      CATALOGUE[cat].forEach(x => { if (!deja.has(norm(x[0]))) d.articles.push(artDe(cat, x)); });
+    });
+    d.catV = 1;
+  }
+  d.articles.forEach(a => { if (!CATS.some(c => c.id === a.cat)) a.cat = 'homme'; });
   d.v = 1;
   return d;
 }
@@ -530,7 +573,7 @@ function save() {
 
 /* ---------- État de l'écran ---------- */
 let S = null, F = null;
-let periode = 'jour', caisseDate = addDays(-1), bilanMois = dISO().slice(0, 7), navInterne = 0, cmdFilter = 'encours', cmdQ = '', cmdLimit = 60, cliQ = '', payMode = 'Espèces';
+let derniereCat = 'homme', tarifCat = 'homme', periode = 'jour', caisseDate = addDays(-1), bilanMois = dISO().slice(0, 7), navInterne = 0, cmdFilter = 'encours', cmdQ = '', cmdLimit = 60, cliQ = '', payMode = 'Espèces';
 let pendingImport = null, deferredInstall = null, installLater = false;
 const standalone = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
 const ui = {remise: null};
@@ -984,12 +1027,12 @@ function vCommande(id, q) {
 function newForm(clientId) {
   const cl = clientId ? client(clientId) : null;
   return {editId: null, clientId: cl ? cl.id : null, tel: cl ? cl.tel : '', nom: cl ? cl.nom : '', lignes: [], express: false, remise: 0,
-    date: addDays(+S.settings.delai || 0), note: '', avance: '', mode: 'Espèces', monnaieLater: false, service: S.services[0].id, noteOpen: {}};
+    date: addDays(+S.settings.delai || 0), note: '', avance: '', mode: 'Espèces', monnaieLater: false, service: S.services[0].id, cat: derniereCat, noteOpen: {}};
 }
 function editForm(c) {
   const cl = client(c.clientId) || {};
-  return {editId: c.id, clientId: c.clientId, tel: cl.tel || '', nom: cl.nom || '', lignes: c.lignes.map(l => ({...l, k: uid()})),
-    express: c.express, remise: c.remise || 0, date: c.dateRetraitPrevue, note: c.note || '', avance: '', mode: 'Espèces', service: S.services[0].id, noteOpen: {}};
+  return {editId: c.id, clientId: c.clientId, tel: cl.tel || '', nom: cl.nom || '', lignes: c.lignes.map(l => ({...l, cat: l.cat || (S.articles.find(a => a.id === l.articleId) || {}).cat, k: uid()})),
+    express: c.express, remise: c.remise || 0, date: c.dateRetraitPrevue, note: c.note || '', avance: '', mode: 'Espèces', service: S.services[0].id, cat: derniereCat, noteOpen: {}};
 }
 const line = k => F.lignes.find(l => l.k === k);
 const svc = id => S.services.find(s => s.id === id) || S.services[0];
@@ -1078,10 +1121,19 @@ function vDepot(id, q) {
 
     <section class="sect"><h2>Articles</h2>
       <div class="seg seg-scroll" role="group" aria-label="Service">${S.services.map(sv => `<button class="chip ${F.service === sv.id ? 'on' : ''}" data-a="fsvc" data-id="${sv.id}" aria-pressed="${F.service === sv.id}">${esc(sv.nom)}</button>`).join('')}</div>
-      <div class="art-grid">${S.articles.map(a => {
-        const p = +a.prix[F.service] || 0, n = counts[a.id];
-        return `<button class="art ${n ? 'has' : ''}" data-a="fadd" data-id="${a.id}" ${p ? '' : 'disabled'}><span>${esc(a.nom)}</span><small>${p ? money(p) : 'non proposé'}</small>${n ? `<em class="badge">${n}</em>` : ''}</button>`;
-      }).join('')}<button class="art art-free" data-a="flibre"><span>Autre article</span><small>prix libre</small></button></div>
+      <div class="cats">${CATS.filter(ct => S.articles.some(a => a.cat === ct.id)).map(ct => {
+        // Accordéon : une seule catégorie ouverte à la fois
+        const open = F.cat === ct.id, arts = S.articles.filter(a => a.cat === ct.id);
+        const ajout = sum(F.lignes.filter(l => l.cat === ct.id).map(l => l.qte));
+        return `<div class="cat ${open ? 'open' : ''}">
+          <button class="cat-h" data-a="fcat" data-id="${ct.id}" aria-expanded="${open}"><span class="cat-n">${ct.nom}</span><small>${plural(arts.length, 'article')}</small>${ajout ? `<em class="cat-b">${ajout} ajouté${ajout > 1 ? 's' : ''}</em>` : ''}<span class="cat-chev">${I.next}</span></button>
+          ${open ? `<div class="art-grid">${arts.map(a => {
+            const p = +a.prix[F.service] || 0, n = counts[a.id];
+            return `<button class="art ${n ? 'has' : ''}" data-a="fadd" data-id="${a.id}" ${p ? '' : 'disabled'}><span>${esc(a.nom)}</span><small>${p ? money(p) : 'non proposé'}</small>${n ? `<em class="badge">${n}</em>` : ''}</button>`;
+          }).join('')}</div>` : ''}
+        </div>`;
+      }).join('')}</div>
+      <button class="art art-free art-libre" data-a="flibre"><span>Autre article</span><small>prix libre</small></button>
       <div id="f-lines">${linesHTML()}</div>
     </section>
 
@@ -1272,6 +1324,7 @@ function vReglages() {
 }
 
 function vTarifs() {
+  const arts = S.articles.filter(a => a.cat === tarifCat);
   return `<header class="bar"><a class="icon-btn" href="#/reglages" aria-label="Retour aux réglages">${I.back}</a><h1>Tarifs</h1></header>
     <p class="hint">Prix en F CFA. Laissez vide si le service n'est pas proposé pour cet article. Les changements ne touchent pas les commandes déjà enregistrées.</p>
     <section class="sect"><h2>Services</h2>
@@ -1279,11 +1332,15 @@ function vTarifs() {
       <button class="btn btn-l" data-a="svcadd">${I.plus} Ajouter un service</button>
     </section>
     <section class="sect"><h2>Articles</h2>
-      <ul class="tarifs">${S.articles.map(a => `<li class="tarif">
-        <div class="tarif-top"><input class="tarif-nom" data-ch="artnom" data-id="${a.id}" value="${esc(a.nom)}" aria-label="Nom de l'article"><button class="icon-btn" data-a="artdel" data-id="${a.id}" data-confirm="Supprimer ?" aria-label="Supprimer ${esc(a.nom)}">${I.trash}</button></div>
+      <div class="seg seg-scroll" role="group" aria-label="Catégorie">${CATS.map(ct => `<button class="chip ${tarifCat === ct.id ? 'on' : ''}" data-a="tcat" data-id="${ct.id}" aria-pressed="${tarifCat === ct.id}">${ct.nom}<span class="n">${S.articles.filter(a => a.cat === ct.id).length}</span></button>`).join('')}</div>
+      ${arts.length ? '' : `<p class="muted pad">Aucun article dans la catégorie ${catNom(tarifCat).toLowerCase()}.</p>`}
+      <ul class="tarifs">${arts.map(a => `<li class="tarif">
+        <div class="tarif-top"><input class="tarif-nom" data-ch="artnom" data-id="${a.id}" value="${esc(a.nom)}" aria-label="Nom de l'article">
+          <select class="tarif-cat" data-ch="artcat" data-id="${a.id}" aria-label="Catégorie de ${esc(a.nom)}">${CATS.map(ct => `<option value="${ct.id}" ${a.cat === ct.id ? 'selected' : ''}>${ct.nom}</option>`).join('')}</select>
+          <button class="icon-btn" data-a="artdel" data-id="${a.id}" data-confirm="Supprimer ?" aria-label="Supprimer ${esc(a.nom)}">${I.trash}</button></div>
         <div class="tarif-prix">${S.services.map(sv => `<label><span>${esc(sv.nom)}</span><input type="number" inputmode="numeric" min="0" data-ch="artprix" data-id="${a.id}" data-s="${sv.id}" value="${+a.prix[sv.id] || ''}" placeholder="—"></label>`).join('')}</div>
       </li>`).join('')}</ul>
-      <button class="btn btn-l" data-a="artadd">${I.plus} Ajouter un article</button>
+      <button class="btn btn-l" data-a="artadd">${I.plus} Ajouter un article ${catNom(tarifCat).toLowerCase()}</button>
     </section>`;
 }
 
@@ -1538,8 +1595,15 @@ const A = {
     const a = S.articles.find(x => x.id === el.dataset.id), sv = svc(F.service), p = +a.prix[sv.id] || 0;
     const ex = F.lignes.find(l => l.articleId === a.id && l.serviceId === sv.id && !l.note);
     if (ex) ex.qte++;
-    else F.lignes.push({k: uid(), articleId: a.id, nom: a.nom, serviceId: sv.id, serviceNom: sv.nom, qte: 1, pu: p, note: ''});
+    else F.lignes.push({k: uid(), articleId: a.id, nom: nomLigne(a), cat: a.cat, serviceId: sv.id, serviceNom: sv.nom, qte: 1, pu: p, note: ''});
     render();
+  },
+  fcat(el) {
+    const id = el.dataset.id;
+    F.cat = F.cat === id ? '' : id;   // retoucher la catégorie ouverte la referme
+    if (F.cat) derniereCat = F.cat;
+    render();
+    $('.cat.open')?.scrollIntoView({block: 'nearest', behavior: 'smooth'});
   },
   flibre() {
     const sv = svc(F.service), k = uid();
@@ -1568,7 +1632,8 @@ const A = {
     S.services = S.services.filter(s => s.id !== el.dataset.id);
     save(); toast('Service supprimé'); render();
   },
-  artadd() { S.articles.push({id: uid(), nom: 'Nouvel article', prix: {}}); save(); render(); const ins = document.querySelectorAll('.tarif-nom'); const last = ins[ins.length - 1]; last?.focus(); last?.select(); },
+  tcat(el) { tarifCat = el.dataset.id; render(); },
+  artadd() { S.articles.push({id: uid(), nom: 'Nouvel article', cat: tarifCat, prix: {}}); save(); render(); const ins = document.querySelectorAll('.tarif-nom'); const last = ins[ins.length - 1]; last?.focus(); last?.select(); },
   artdel(el) { S.articles = S.articles.filter(a => a.id !== el.dataset.id); save(); toast('Article supprimé'); render(); },
 
   // Sauvegarde et divers
@@ -1665,6 +1730,11 @@ const CH = {
     if (f === 'nom') $('.bar h1').textContent = v;
   },
   svcnom(el) { const sv = svc(el.dataset.id), v = el.value.trim(); if (!v) { el.value = sv.nom; return; } sv.nom = v; save(); toast('Service renommé'); },
+  artcat(el) {
+    const a = S.articles.find(x => x.id === el.dataset.id);
+    a.cat = CATS.some(c => c.id === el.value) ? el.value : 'homme';
+    save(); toast(`${a.nom} : catégorie ${catNom(a.cat)}`); render();
+  },
   artnom(el) { const a = S.articles.find(x => x.id === el.dataset.id), v = el.value.trim(); if (!v) { el.value = a.nom; return; } a.nom = v; save(); toast('Enregistré'); },
   artprix(el) {
     const a = S.articles.find(x => x.id === el.dataset.id), v = Math.max(0, Math.round(+el.value || 0));
